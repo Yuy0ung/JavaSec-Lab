@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">SQL注入登录演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .login-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .payload-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .form-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Java Security Lab
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/sqli">SQL注入</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/sqli/login">登录演示</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 页面标题 -->
+    <div class="bg-danger text-white py-4">
+        <div class="container">
+            <h1><i class="fas fa-sign-in-alt"></i> SQL注入登录绕过演示</h1>
+            <p class="lead mb-0">演示如何通过SQL注入绕过登录验证</p>
+        </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container my-5">
+        <div class="login-container">
+            <!-- 说明部分 -->
+            <div class="form-section">
+                <h3><i class="fas fa-info-circle text-primary"></i> 演示说明</h3>
+                <p>本演示包含两种登录方式：</p>
+                <ul>
+                    <li><strong class="text-danger">不安全登录：</strong>直接拼接SQL语句，存在SQL注入漏洞</li>
+                    <li><strong class="text-success">安全登录：</strong>使用参数化查询，防止SQL注入</li>
+                </ul>
+                
+                <div class="payload-example">
+                    <h5><i class="fas fa-bug text-danger"></i> 常用SQL注入Payload：</h5>
+                    <ul class="mb-0">
+                        <li><code>admin' OR '1'='1' --</code> （万能密码）</li>
+                        <li><code>admin' OR 1=1 #</code> （MySQL注释）</li>
+                        <li><code>' OR ''=''</code> （空用户名绕过）</li>
+                        <li><code>admin'/**/OR/**/1=1--</code> （绕过空格过滤）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 不安全登录表单 -->
+            <div class="form-section">
+                <h3><i class="fas fa-exclamation-triangle text-danger"></i> 不安全登录（存在SQL注入漏洞）</h3>
+                <form action="/sqli/login/unsafe" method="post">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="unsafeUsername" class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="unsafeUsername" name="username" 
+                                       placeholder="尝试输入: admin' OR '1'='1' --" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="unsafePassword" class="form-label">密码</label>
+                                <input type="password" class="form-control" id="unsafePassword" name="password" 
+                                       placeholder="任意密码" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-bug"></i> 不安全登录
+                    </button>
+                </form>
+                
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-lightbulb"></i> 
+                        提示：尝试在用户名字段输入SQL注入payload，密码可以随意填写
+                    </small>
+                </div>
+            </div>
+
+            <!-- 安全登录表单 -->
+            <div class="form-section">
+                <h3><i class="fas fa-shield-alt text-success"></i> 安全登录（防SQL注入）</h3>
+                <form action="/sqli/login/safe" method="post">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="safeUsername" class="form-label">用户名</label>
+                                <input type="text" class="form-control" id="safeUsername" name="username" 
+                                       placeholder="输入正确的用户名" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="safePassword" class="form-label">密码</label>
+                                <input type="password" class="form-control" id="safePassword" name="password" 
+                                       placeholder="输入正确的密码" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-shield-alt"></i> 安全登录
+                    </button>
+                </form>
+                
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        这个表单使用参数化查询，SQL注入payload将被当作普通字符串处理
+                    </small>
+                </div>
+            </div>
+
+            <!-- 测试账户信息 -->
+            <div class="form-section">
+                <h3><i class="fas fa-users text-info"></i> 测试账户</h3>
+                <p>你可以使用以下账户进行正常登录测试：</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>admin</strong> / admin123</li>
+                            <li><strong>john</strong> / password123</li>
+                            <li><strong>alice</strong> / alice456</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>bob</strong> / bob789</li>
+                            <li><strong>manager</strong> / manager123</li>
+                            <li><strong>secret</strong> / topsecret</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速测试按钮 -->
+            <div class="form-section">
+                <h3><i class="fas fa-rocket text-warning"></i> 快速测试</h3>
+                <p>点击下面的按钮快速测试常见的SQL注入payload：</p>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeForm('admin\' OR \'1\'=\'1\' --', 'anything')">
+                        万能密码1
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeForm('admin\' OR 1=1 #', 'anything')">
+                        万能密码2
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeForm('\' OR \'\'=\'\'', '')">
+                        空绕过
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="fillSafeForm('admin', 'admin123')">
+                        正常登录
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Java Security Lab. 仅用于教育目的.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function fillUnsafeForm(username, password) {
+            document.getElementById('unsafeUsername').value = username;
+            document.getElementById('unsafePassword').value = password;
+        }
+        
+        function fillSafeForm(username, password) {
+            document.getElementById('safeUsername').value = username;
+            document.getElementById('safePassword').value = password;
+        }
+    </script>
+</body>
+</html>

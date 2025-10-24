@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">反射型XSS演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .reflected-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .payload-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .form-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .result-display {
+            background-color: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 60px;
+        }
+        .unsafe-result {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .safe-result {
+            border-color: #198754;
+            background-color: #d1e7dd;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Java Security Lab
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/xss">XSS演示</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/xss/reflected">反射型XSS</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 页面标题 -->
+    <div class="bg-danger text-white py-4">
+        <div class="container">
+            <h1><i class="fas fa-mirror"></i> 反射型XSS演示</h1>
+            <p class="lead mb-0">演示反射型跨站脚本攻击的原理和防护</p>
+        </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container my-5">
+        <div class="reflected-container">
+            <!-- 说明部分 -->
+            <div class="form-section">
+                <h3><i class="fas fa-info-circle text-primary"></i> 反射型XSS说明</h3>
+                <p>反射型XSS（Reflected XSS）是最常见的XSS攻击类型，恶意脚本通过URL参数、表单提交等方式传递给服务器，然后被"反射"回用户浏览器并执行。</p>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-exclamation-triangle text-danger"></i> 攻击特点：</h5>
+                        <ul>
+                            <li>非持久性攻击</li>
+                            <li>需要诱导用户点击恶意链接</li>
+                            <li>脚本在用户浏览器中立即执行</li>
+                            <li>常见于搜索框、错误页面等</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-shield-alt text-success"></i> 防护方法：</h5>
+                        <ul>
+                            <li>输入验证和过滤</li>
+                            <li>输出HTML编码</li>
+                            <li>使用安全的模板引擎</li>
+                            <li>设置Content Security Policy</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="payload-example">
+                    <h5><i class="fas fa-bug text-danger"></i> 常用反射型XSS Payload：</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="mb-0">
+                                <li><code>&lt;script&gt;alert('XSS')&lt;/script&gt;</code></li>
+                                <li><code>&lt;img src=x onerror=alert('XSS')&gt;</code></li>
+                                <li><code>&lt;svg onload=alert('XSS')&gt;</code></li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="mb-0">
+                                <li><code>javascript:alert('XSS')</code></li>
+                                <li><code>&lt;iframe src=javascript:alert('XSS')&gt;</code></li>
+                                <li><code>&lt;input onfocus=alert('XSS') autofocus&gt;</code></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 不安全的反射型XSS演示 -->
+            <div class="form-section">
+                <h3><i class="fas fa-exclamation-triangle text-danger"></i> 不安全演示（存在XSS漏洞）</h3>
+                <p>以下表单直接将用户输入反射到页面中，不进行任何过滤或编码：</p>
+                
+                <form action="/xss/reflected/unsafe" method="post">
+                    <div class="mb-3">
+                        <label for="unsafeInput" class="form-label">用户输入</label>
+                        <input type="text" class="form-control" id="unsafeInput" name="input" 
+                               placeholder="尝试输入: &lt;script&gt;alert('XSS')&lt;/script&gt;" 
+                               th:value="${userInput}" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-bug"></i> 不安全提交
+                    </button>
+                </form>
+                
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-lightbulb"></i> 
+                        提示：尝试输入包含HTML标签或JavaScript代码的内容
+                    </small>
+                </div>
+            </div>
+
+            <!-- 安全的反射型XSS演示 -->
+            <div class="form-section">
+                <h3><i class="fas fa-shield-alt text-success"></i> 安全演示（防XSS保护）</h3>
+                <p>以下表单对用户输入进行HTML编码，防止XSS攻击：</p>
+                
+                <form action="/xss/reflected/safe" method="post">
+                    <div class="mb-3">
+                        <label for="safeInput" class="form-label">用户输入</label>
+                        <input type="text" class="form-control" id="safeInput" name="input" 
+                               placeholder="输入任何内容，包括HTML标签" 
+                               th:value="${userInput}" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-shield-alt"></i> 安全提交
+                    </button>
+                </form>
+                
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        这个表单会对输入进行HTML编码，恶意脚本将被转义为普通文本
+                    </small>
+                </div>
+            </div>
+
+            <!-- 快速测试按钮 -->
+            <div class="form-section">
+                <h3><i class="fas fa-rocket text-warning"></i> 快速测试</h3>
+                <p>点击下面的按钮快速填入常见的XSS payload进行测试：</p>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>不安全测试：</h5>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeInput('&lt;script&gt;alert(\'XSS\')&lt;/script&gt;')">
+                                基础脚本
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeInput('&lt;img src=x onerror=alert(\'XSS\')&gt;')">
+                                图片事件
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="fillUnsafeInput('&lt;svg onload=alert(\'XSS\')&gt;')">
+                                SVG载入
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>安全测试：</h5>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button class="btn btn-outline-success btn-sm" onclick="fillSafeInput('&lt;script&gt;alert(\'XSS\')&lt;/script&gt;')">
+                                基础脚本
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" onclick="fillSafeInput('&lt;h1&gt;HTML标签&lt;/h1&gt;')">
+                                HTML标签
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" onclick="fillSafeInput('正常文本内容')">
+                                正常文本
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果显示 -->
+            <div class="form-section" th:if="${result != null}">
+                <h3><i class="fas fa-eye text-info"></i> 处理结果</h3>
+                
+                <div class="alert" th:classappend="${isUnsafe} ? 'alert-danger' : 'alert-success'">
+                    <h5>
+                        <i class="fas" th:classappend="${isUnsafe} ? 'fa-exclamation-triangle' : 'fa-shield-alt'"></i>
+                        <span th:text="${isUnsafe} ? '不安全处理结果' : '安全处理结果'"></span>
+                    </h5>
+                    <p><strong>用户输入：</strong> <code th:text="${userInput}"></code></p>
+                    <p class="mb-0"><strong>处理方式：</strong> 
+                        <span th:text="${isUnsafe} ? '直接输出（存在XSS风险）' : 'HTML编码（安全）'"></span>
+                    </p>
+                </div>
+                
+                <div class="result-display" th:classappend="${isUnsafe} ? 'unsafe-result' : 'safe-result'">
+                    <h5>页面输出效果：</h5>
+                    <div class="border p-3 bg-white">
+                        <!-- 不安全版本：直接输出HTML -->
+                        <div th:if="${isUnsafe}" th:utext="${result}"></div>
+                        <!-- 安全版本：显示编码后的文本 -->
+                        <div th:if="${!isUnsafe}" th:text="${result}"></div>
+                    </div>
+                </div>
+                
+                <div th:if="${isUnsafe}" class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>安全警告：</strong>如果上面的输出中包含弹窗或其他异常行为，说明XSS攻击成功！在真实环境中，这可能导致用户数据泄露、会话劫持等严重后果。
+                </div>
+                
+                <div th:if="${!isUnsafe}" class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>安全提示：</strong>输入已被安全处理，HTML标签被编码为普通文本，有效防止了XSS攻击。
+                </div>
+            </div>
+
+            <!-- 代码对比 -->
+            <div class="form-section">
+                <h3><i class="fas fa-code text-info"></i> 代码实现对比</h3>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 class="text-danger"><i class="fas fa-times-circle"></i> 不安全代码</h5>
+                        <pre class="bg-light p-3 border rounded"><code>// 直接返回用户输入
+public String reflectedXssUnsafe(String input) {
+    return input; // 危险！
+}</code></pre>
+                        <div class="alert alert-danger">
+                            <small><i class="fas fa-exclamation-triangle"></i> 直接输出用户输入，存在XSS风险</small>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h5 class="text-success"><i class="fas fa-check-circle"></i> 安全代码</h5>
+                        <pre class="bg-light p-3 border rounded"><code>// HTML编码处理
+public String reflectedXssSafe(String input) {
+    return escapeHtml(input); // 安全
+}</code></pre>
+                        <div class="alert alert-success">
+                            <small><i class="fas fa-shield-alt"></i> 对输入进行HTML编码，防止XSS攻击</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 防护建议 -->
+            <div class="form-section">
+                <h3><i class="fas fa-shield-alt text-success"></i> 反射型XSS防护建议</h3>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>输入处理：</h5>
+                        <ul>
+                            <li>验证输入格式和长度</li>
+                            <li>过滤危险字符和标签</li>
+                            <li>使用白名单而非黑名单</li>
+                            <li>对特殊字符进行转义</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>输出处理：</h5>
+                        <ul>
+                            <li>HTML实体编码</li>
+                            <li>JavaScript编码</li>
+                            <li>URL编码</li>
+                            <li>CSS编码</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                    <h6><i class="fas fa-lightbulb"></i> 最佳实践</h6>
+                    <p class="mb-0">
+                        1. 永远不要信任用户输入<br>
+                        2. 在输出时进行适当的编码<br>
+                        3. 使用安全的模板引擎<br>
+                        4. 实施Content Security Policy (CSP)
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Java Security Lab. 仅用于教育目的.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function fillUnsafeInput(payload) {
+            document.getElementById('unsafeInput').value = payload;
+        }
+        
+        function fillSafeInput(payload) {
+            document.getElementById('safeInput').value = payload;
+        }
+    </script>
+</body>
+</html>

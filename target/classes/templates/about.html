@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">关于 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Java Security Lab
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/about">关于</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/h2-console" target="_blank">数据库控制台</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容 -->
+    <div class="container my-5">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <h1 class="text-center mb-5">关于 Java Security Lab</h1>
+                
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3><i class="fas fa-info-circle text-primary"></i> 项目简介</h3>
+                        <p>Java Security Lab 是一个专门用于演示和学习Java Web安全漏洞的实验室环境。本项目旨在帮助开发者、安全研究人员和学生深入理解常见的Web安全漏洞，掌握攻击原理和防护方法。</p>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3><i class="fas fa-target text-danger"></i> 涵盖的漏洞类型</h3>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <strong>SQL注入 (SQLi):</strong> 联合查询注入、布尔盲注、时间盲注等
+                            </li>
+                            <li class="list-group-item">
+                                <strong>跨站脚本 (XSS):</strong> 反射型XSS、存储型XSS、DOM型XSS
+                            </li>
+                            <li class="list-group-item">
+                                <strong>命令执行 (RCE):</strong> 系统命令注入、代码执行漏洞
+                            </li>
+                            <li class="list-group-item">
+                                <strong>服务端请求伪造 (SSRF):</strong> 内网探测、云服务攻击
+                            </li>
+                            <li class="list-group-item">
+                                <strong>XML外部实体注入 (XXE):</strong> 文件读取、SSRF攻击
+                            </li>
+                            <li class="list-group-item">
+                                <strong>文件上传漏洞:</strong> 绕过技术、Webshell上传
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3><i class="fas fa-cogs text-success"></i> 技术栈</h3>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul>
+                                    <li>Spring Boot 2.7.18</li>
+                                    <li>Spring Data JPA</li>
+                                    <li>Thymeleaf 模板引擎</li>
+                                    <li>H2 内存数据库</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul>
+                                    <li>Bootstrap 5 前端框架</li>
+                                    <li>Font Awesome 图标</li>
+                                    <li>Maven 构建工具</li>
+                                    <li>Java 14+</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3><i class="fas fa-graduation-cap text-info"></i> 学习目标</h3>
+                        <ul>
+                            <li>理解常见Web安全漏洞的成因和危害</li>
+                            <li>掌握各种攻击技术和payload构造方法</li>
+                            <li>学习有效的安全防护措施和最佳实践</li>
+                            <li>提升代码安全审计和漏洞挖掘能力</li>
+                            <li>培养安全开发意识和习惯</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning">
+                    <h4><i class="fas fa-exclamation-triangle"></i> 重要声明</h4>
+                    <ul class="mb-0">
+                        <li>本实验室<strong>仅用于教育和学习目的</strong></li>
+                        <li>请勿在生产环境中部署或使用本项目代码</li>
+                        <li>请勿将学到的攻击技术用于非法用途</li>
+                        <li>使用者需承担相应的法律责任</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h3><i class="fas fa-book text-warning"></i> 使用建议</h3>
+                        <ol>
+                            <li>建议在隔离的测试环境中运行本实验室</li>
+                            <li>每个漏洞模块都包含详细的说明和示例</li>
+                            <li>尝试不同的攻击payload，观察系统响应</li>
+                            <li>学习每种漏洞的防护方法和安全编码规范</li>
+                            <li>可以查看源代码了解漏洞的具体实现</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Java Security Lab. 仅用于教育目的.</p>
+            <p>
+                <i class="fas fa-exclamation-triangle text-warning"></i>
+                请勿在生产环境中使用本实验室的代码！
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>命令执行演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-demo { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-demo { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .result-box { min-height: 150px; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa; font-family: monospace; white-space: pre-wrap; }
+        .command-input { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/rce">RCE主页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">命令执行演示</h1>
+                
+                <!-- 说明部分 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> 命令注入漏洞</h5>
+                    <p>命令注入是指攻击者能够在目标系统上执行任意操作系统命令的漏洞。当应用程序将用户输入直接传递给系统命令执行函数时，就可能发生这种漏洞。</p>
+                    <p><strong>常见场景：</strong> 网络工具（ping、nslookup）、文件操作、系统管理功能等</p>
+                    <p><strong>注入技巧：</strong> 使用 <code>;</code> <code>|</code> <code>&&</code> <code>||</code> <code>`</code> <code>$()</code> 等分隔符</p>
+                </div>
+
+                <!-- 常见载荷 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>常见命令注入载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>基础载荷：</h6>
+                                <div class="payload-box p-2 mb-2" th:each="payload : ${payloads}" th:if="${payloadStat.index < 6}">
+                                    <code th:text="${payload}">载荷</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>注入技巧：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>127.0.0.1; ls -la</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>127.0.0.1 | whoami</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>127.0.0.1 && cat /etc/passwd</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>127.0.0.1 || id</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>`whoami`</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>$(ls -la)</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 演示区域 -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card vulnerability-demo mb-4">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 漏洞演示 - 直接命令执行</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-danger"><strong>危险：</strong> 直接执行用户输入的命令</p>
+                                
+                                <form id="unsafeForm">
+                                    <div class="mb-3">
+                                        <label for="unsafeCommand" class="form-label">输入命令：</label>
+                                        <input type="text" class="form-control command-input" id="unsafeCommand" 
+                                               placeholder="例如: ls -la" value="ls -la">
+                                    </div>
+                                    <div class="mb-3">
+                                        <button type="button" class="btn btn-danger" onclick="executeUnsafe()">
+                                            <i class="fas fa-play"></i> 执行命令（危险）
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearUnsafeResult()">
+                                            清除结果
+                                        </button>
+                                    </div>
+                                </form>
+                                
+                                <div class="mb-3">
+                                    <h6>快速测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeCommand('ls -la')">
+                                            ls -la
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeCommand('whoami')">
+                                            whoami
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeCommand('pwd')">
+                                            pwd
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeCommand('ls -la; whoami')">
+                                            命令注入测试
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeCommand('cat /etc/passwd')">
+                                            读取敏感文件
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>执行结果：</h6>
+                                    <div id="unsafeResult" class="result-box">
+                                        点击"执行命令"查看结果...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card safe-demo mb-4">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 安全版本 - 命令白名单</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-success"><strong>安全：</strong> 使用命令白名单和参数验证</p>
+                                
+                                <form id="safeForm">
+                                    <div class="mb-3">
+                                        <label for="safeCommand" class="form-label">输入命令：</label>
+                                        <input type="text" class="form-control command-input" id="safeCommand" 
+                                               placeholder="只允许: ls, pwd, whoami, date, echo" value="ls">
+                                    </div>
+                                    <div class="mb-3">
+                                        <button type="button" class="btn btn-success" onclick="executeSafe()">
+                                            <i class="fas fa-shield-alt"></i> 安全执行
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearSafeResult()">
+                                            清除结果
+                                        </button>
+                                    </div>
+                                </form>
+                                
+                                <div class="mb-3">
+                                    <h6>允许的命令：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-success btn-sm" onclick="setSafeCommand('ls')">
+                                            ls
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="setSafeCommand('pwd')">
+                                            pwd
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="setSafeCommand('whoami')">
+                                            whoami
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="setSafeCommand('date')">
+                                            date
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" onclick="setSafeCommand('rm -rf /')">
+                                            测试危险命令
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>执行结果：</h6>
+                                    <div id="safeResult" class="result-box">
+                                        点击"安全执行"查看结果...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代码对比 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>代码实现对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">漏洞代码：</h6>
+                                <pre><code class="language-java">// 危险：直接执行用户输入
+public String executeCommand(String cmd) {
+    try {
+        Process process = Runtime.getRuntime().exec(cmd);
+        // 读取输出...
+        return output;
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success">安全代码：</h6>
+                                <pre><code class="language-java">// 安全：使用白名单验证
+public String executeCommand(String cmd) {
+    if (!isAllowedCommand(cmd)) {
+        return "Command not allowed";
+    }
+    
+    try {
+        List&lt;String&gt; cmdList = Arrays.asList(cmd.split(" "));
+        ProcessBuilder pb = new ProcessBuilder(cmdList);
+        Process process = pb.start();
+        // 设置超时和读取输出...
+        return output;
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 绕过技巧 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>命令注入绕过技巧</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>分隔符绕过：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>cmd1; cmd2</code> - 顺序执行
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>cmd1 | cmd2</code> - 管道传递
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>cmd1 && cmd2</code> - 条件执行
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>cmd1 || cmd2</code> - 或执行
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>命令替换：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>`command`</code> - 反引号
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>$(command)</code> - 美元符号
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>${command}</code> - 变量替换
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>$((expression))</code> - 算术替换
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>编码绕过：</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>%0a</code> - 换行符
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>%0d</code> - 回车符
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>%09</code> - 制表符
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护建议 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> 命令注入防护建议</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>输入验证：</h6>
+                            <ul>
+                                <li>使用命令白名单</li>
+                                <li>严格的参数验证</li>
+                                <li>过滤特殊字符</li>
+                                <li>限制命令长度</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>安全编程：</h6>
+                            <ul>
+                                <li>使用ProcessBuilder</li>
+                                <li>避免shell解释器</li>
+                                <li>设置执行超时</li>
+                                <li>最小权限运行</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测方法 -->
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-search"></i> 命令注入检测方法</h5>
+                    <ul class="mb-0">
+                        <li><strong>时间延迟：</strong> 使用 <code>sleep</code> 或 <code>ping</code> 命令检测执行</li>
+                        <li><strong>DNS查询：</strong> 使用 <code>nslookup</code> 或 <code>dig</code> 进行外带检测</li>
+                        <li><strong>文件操作：</strong> 创建或修改文件来验证执行</li>
+                        <li><strong>网络连接：</strong> 使用 <code>curl</code> 或 <code>wget</code> 进行HTTP请求</li>
+                        <li><strong>错误回显：</strong> 观察错误信息判断命令是否执行</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // 执行不安全的命令
+        function executeUnsafe() {
+            const command = document.getElementById('unsafeCommand').value;
+            if (!command.trim()) {
+                alert('请输入命令');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('unsafeResult');
+            resultDiv.textContent = '执行中...';
+            
+            fetch('/rce/command/unsafe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'command=' + encodeURIComponent(command)
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `命令: ${data.command}\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n`;
+                result += `退出码: ${data.exitCode || 'N/A'}\n\n`;
+                
+                if (data.output) {
+                    result += `输出:\n${data.output}\n`;
+                }
+                
+                if (data.error) {
+                    result += `错误:\n${data.error}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '请求失败: ' + error;
+            });
+        }
+        
+        // 执行安全的命令
+        function executeSafe() {
+            const command = document.getElementById('safeCommand').value;
+            if (!command.trim()) {
+                alert('请输入命令');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('safeResult');
+            resultDiv.textContent = '执行中...';
+            
+            fetch('/rce/command/safe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'command=' + encodeURIComponent(command)
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `命令: ${data.command}\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n`;
+                result += `退出码: ${data.exitCode || 'N/A'}\n\n`;
+                
+                if (data.output) {
+                    result += `输出:\n${data.output}\n`;
+                }
+                
+                if (data.error) {
+                    result += `错误:\n${data.error}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '请求失败: ' + error;
+            });
+        }
+        
+        // 设置不安全命令
+        function setUnsafeCommand(command) {
+            document.getElementById('unsafeCommand').value = command;
+        }
+        
+        // 设置安全命令
+        function setSafeCommand(command) {
+            document.getElementById('safeCommand').value = command;
+        }
+        
+        // 清除结果
+        function clearUnsafeResult() {
+            document.getElementById('unsafeResult').textContent = '点击"执行命令"查看结果...';
+        }
+        
+        function clearSafeResult() {
+            document.getElementById('safeResult').textContent = '点击"安全执行"查看结果...';
+        }
+        
+        // 回车键执行
+        document.getElementById('unsafeCommand').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                executeUnsafe();
+            }
+        });
+        
+        document.getElementById('safeCommand').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                executeSafe();
+            }
+        });
+    </script>
+</body>
+</html>

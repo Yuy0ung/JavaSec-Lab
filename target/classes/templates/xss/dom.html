@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOM型XSS演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-demo { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-demo { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .result-box { min-height: 100px; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa; }
+        .demo-container { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xss">XSS主页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">DOM型XSS (DOM-based XSS) 演示</h1>
+                
+                <!-- 说明部分 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> 什么是DOM型XSS？</h5>
+                    <p>DOM型XSS是一种完全在客户端发生的XSS攻击。恶意脚本通过修改页面的DOM环境来执行，而不需要服务器参与。攻击载荷通常来自URL片段、表单输入或其他客户端数据源。</p>
+                    <p><strong>攻击流程：</strong> 恶意URL/输入 → JavaScript处理 → 动态修改DOM → 恶意脚本执行</p>
+                    <p><strong>特点：</strong> 服务器日志中看不到攻击载荷，完全在浏览器端执行</p>
+                </div>
+
+                <!-- 常见载荷 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>常见DOM型XSS载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>URL片段载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>#&lt;script&gt;alert('DOM XSS')&lt;/script&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>#&lt;img src=x onerror=alert('XSS')&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>#&lt;svg onload=alert(document.cookie)&gt;</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>JavaScript伪协议：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>javascript:alert('XSS')</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>javascript:eval(atob('YWxlcnQoJ1hTUycp'))</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>data:text/html,&lt;script&gt;alert('XSS')&lt;/script&gt;</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DOM XSS演示1：innerHTML -->
+                <div class="demo-container">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card vulnerability-demo mb-4">
+                                <div class="card-header bg-warning">
+                                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 漏洞演示1 - innerHTML</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-danger"><strong>危险：</strong> 使用innerHTML直接插入用户输入</p>
+                                    
+                                    <div class="mb-3">
+                                        <label for="innerHtmlInput" class="form-label">输入内容：</label>
+                                        <input type="text" class="form-control" id="innerHtmlInput" 
+                                               placeholder="输入要显示的内容...">
+                                    </div>
+                                    <button class="btn btn-danger" onclick="vulnerableInnerHTML()">
+                                        使用innerHTML显示（危险）
+                                    </button>
+                                    
+                                    <div class="mt-3">
+                                        <h6>快速测试：</h6>
+                                        <button class="btn btn-sm btn-outline-danger me-2" 
+                                                onclick="document.getElementById('innerHtmlInput').value='&lt;script&gt;alert(\'innerHTML XSS!\')&lt;/script&gt;'">
+                                            Script标签
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger me-2" 
+                                                onclick="document.getElementById('innerHtmlInput').value='&lt;img src=x onerror=alert(\'Image XSS!\')&gt;'">
+                                            Image事件
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                onclick="document.getElementById('innerHtmlInput').value='&lt;svg onload=alert(\'SVG XSS!\')&gt;'">
+                                            SVG事件
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h6>显示结果：</h6>
+                                        <div id="innerHtmlResult" class="result-box">结果将显示在这里...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card safe-demo mb-4">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 安全版本 - textContent</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-success"><strong>安全：</strong> 使用textContent只插入文本内容</p>
+                                    
+                                    <div class="mb-3">
+                                        <label for="textContentInput" class="form-label">输入内容：</label>
+                                        <input type="text" class="form-control" id="textContentInput" 
+                                               placeholder="输入要显示的内容...">
+                                    </div>
+                                    <button class="btn btn-success" onclick="safeTextContent()">
+                                        使用textContent显示（安全）
+                                    </button>
+                                    
+                                    <div class="mt-3">
+                                        <h6>快速测试：</h6>
+                                        <button class="btn btn-sm btn-outline-success me-2" 
+                                                onclick="document.getElementById('textContentInput').value='&lt;script&gt;alert(\'不会执行\')&lt;/script&gt;'">
+                                            Script标签
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success me-2" 
+                                                onclick="document.getElementById('textContentInput').value='&lt;img src=x onerror=alert(\'安全的\')&gt;'">
+                                            Image事件
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" 
+                                                onclick="document.getElementById('textContentInput').value='正常文本内容'">
+                                            正常文本
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h6>显示结果：</h6>
+                                        <div id="textContentResult" class="result-box">结果将显示在这里...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DOM XSS演示2：URL片段 -->
+                <div class="demo-container">
+                    <div class="card vulnerability-demo mb-4">
+                        <div class="card-header bg-warning">
+                            <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 漏洞演示2 - URL片段处理</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-danger"><strong>危险：</strong> 直接处理URL片段(location.hash)并插入DOM</p>
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        <label for="hashInput" class="form-label">URL片段内容：</label>
+                                        <input type="text" class="form-control" id="hashInput" 
+                                               placeholder="输入URL片段内容（不包含#）...">
+                                    </div>
+                                    <button class="btn btn-danger me-2" onclick="vulnerableHashProcessing()">
+                                        处理URL片段（危险）
+                                    </button>
+                                    <button class="btn btn-success" onclick="safeHashProcessing()">
+                                        安全处理URL片段
+                                    </button>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>快速测试：</h6>
+                                    <button class="btn btn-sm btn-outline-danger mb-2 w-100" 
+                                            onclick="testHashXSS('&lt;script&gt;alert(\'Hash XSS!\')&lt;/script&gt;')">
+                                        Script XSS
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger mb-2 w-100" 
+                                            onclick="testHashXSS('&lt;img src=x onerror=alert(\'Hash Image XSS!\')&gt;')">
+                                        Image XSS
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success w-100" 
+                                            onclick="testHashXSS('正常的锚点内容')">
+                                        正常内容
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <h6>当前URL片段：</h6>
+                                <div id="currentHash" class="result-box">无</div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <h6>处理结果：</h6>
+                                <div id="hashResult" class="result-box">结果将显示在这里...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DOM XSS演示3：动态脚本创建 -->
+                <div class="demo-container">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card vulnerability-demo mb-4">
+                                <div class="card-header bg-warning">
+                                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 漏洞演示3 - 动态脚本</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-danger"><strong>危险：</strong> 动态创建script标签执行用户输入</p>
+                                    
+                                    <div class="mb-3">
+                                        <label for="scriptInput" class="form-label">JavaScript代码：</label>
+                                        <textarea class="form-control" id="scriptInput" rows="3" 
+                                                placeholder="输入JavaScript代码..."></textarea>
+                                    </div>
+                                    <button class="btn btn-danger" onclick="vulnerableScriptExecution()">
+                                        执行代码（危险）
+                                    </button>
+                                    
+                                    <div class="mt-3">
+                                        <h6>快速测试：</h6>
+                                        <button class="btn btn-sm btn-outline-danger me-2" 
+                                                onclick="document.getElementById('scriptInput').value='alert(\'动态脚本XSS!\');'">
+                                            弹窗测试
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger me-2" 
+                                                onclick="document.getElementById('scriptInput').value='console.log(document.cookie);'">
+                                            Cookie获取
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" 
+                                                onclick="document.getElementById('scriptInput').value='document.body.style.backgroundColor=\'red\';'">
+                                            页面修改
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card safe-demo mb-4">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 安全建议</h5>
+                                </div>
+                                <div class="card-body">
+                                    <h6>DOM XSS防护措施：</h6>
+                                    <ul>
+                                        <li><strong>避免innerHTML：</strong> 使用textContent或innerText</li>
+                                        <li><strong>输入验证：</strong> 验证和过滤所有用户输入</li>
+                                        <li><strong>CSP策略：</strong> 实施内容安全策略</li>
+                                        <li><strong>安全API：</strong> 使用安全的DOM操作方法</li>
+                                        <li><strong>编码输出：</strong> 对输出进行适当编码</li>
+                                    </ul>
+                                    
+                                    <h6 class="mt-3">安全的DOM操作：</h6>
+                                    <div class="payload-box p-2">
+                                        <code>
+// 安全方式<br>
+element.textContent = userInput;<br>
+element.setAttribute('title', userInput);<br>
+// 避免<br>
+element.innerHTML = userInput;<br>
+eval(userInput);
+                                        </code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代码对比 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>代码实现对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">危险代码：</h6>
+                                <pre><code class="language-javascript">// 危险：直接使用innerHTML
+function vulnerableInnerHTML() {
+    var input = document.getElementById('input').value;
+    document.getElementById('result').innerHTML = input;
+}
+
+// 危险：处理URL片段
+function processHash() {
+    var hash = location.hash.substring(1);
+    document.getElementById('content').innerHTML = hash;
+}
+
+// 危险：动态执行脚本
+function executeScript() {
+    var code = document.getElementById('code').value;
+    eval(code);
+}</code></pre>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success">安全代码：</h6>
+                                <pre><code class="language-javascript">// 安全：使用textContent
+function safeTextContent() {
+    var input = document.getElementById('input').value;
+    document.getElementById('result').textContent = input;
+}
+
+// 安全：验证和编码URL片段
+function safeProcessHash() {
+    var hash = location.hash.substring(1);
+    if (isValidHash(hash)) {
+        document.getElementById('content').textContent = hash;
+    }
+}
+
+// 安全：避免动态执行
+function safeOperation() {
+    // 使用预定义的安全操作
+    // 避免eval()和Function()构造器
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学习提示 -->
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-lightbulb"></i> DOM XSS检测技巧</h5>
+                    <ul class="mb-0">
+                        <li><strong>查看源码：</strong> 检查JavaScript如何处理用户输入</li>
+                        <li><strong>URL测试：</strong> 在URL片段中插入XSS载荷</li>
+                        <li><strong>表单输入：</strong> 测试所有可能被JavaScript处理的输入</li>
+                        <li><strong>开发者工具：</strong> 使用浏览器开发者工具跟踪DOM变化</li>
+                        <li><strong>自动化工具：</strong> 使用专门的DOM XSS扫描工具</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // 漏洞函数：使用innerHTML
+        function vulnerableInnerHTML() {
+            var input = document.getElementById('innerHtmlInput').value;
+            document.getElementById('innerHtmlResult').innerHTML = input;
+        }
+        
+        // 安全函数：使用textContent
+        function safeTextContent() {
+            var input = document.getElementById('textContentInput').value;
+            document.getElementById('textContentResult').textContent = input;
+        }
+        
+        // 漏洞函数：处理URL片段
+        function vulnerableHashProcessing() {
+            var input = document.getElementById('hashInput').value;
+            if (input) {
+                location.hash = input;
+            }
+            var hash = location.hash.substring(1);
+            document.getElementById('hashResult').innerHTML = '危险处理: ' + hash;
+            updateCurrentHash();
+        }
+        
+        // 安全函数：处理URL片段
+        function safeHashProcessing() {
+            var input = document.getElementById('hashInput').value;
+            if (input) {
+                location.hash = input;
+            }
+            var hash = location.hash.substring(1);
+            // 安全处理：使用textContent并进行验证
+            if (isValidInput(hash)) {
+                document.getElementById('hashResult').textContent = '安全处理: ' + hash;
+            } else {
+                document.getElementById('hashResult').textContent = '输入包含非法字符，已被过滤';
+            }
+            updateCurrentHash();
+        }
+        
+        // 输入验证函数
+        function isValidInput(input) {
+            // 简单的验证：不包含HTML标签
+            return !/<[^>]*>/g.test(input);
+        }
+        
+        // 更新当前hash显示
+        function updateCurrentHash() {
+            var hash = location.hash || '无';
+            document.getElementById('currentHash').textContent = hash;
+        }
+        
+        // 测试hash XSS
+        function testHashXSS(payload) {
+            document.getElementById('hashInput').value = payload;
+        }
+        
+        // 漏洞函数：动态脚本执行
+        function vulnerableScriptExecution() {
+            var code = document.getElementById('scriptInput').value;
+            try {
+                // 危险：直接执行用户输入的代码
+                eval(code);
+                console.log('代码执行完成: ' + code);
+            } catch (e) {
+                console.error('代码执行错误: ' + e.message);
+                alert('代码执行错误: ' + e.message);
+            }
+        }
+        
+        // 页面加载时更新hash显示
+        window.onload = function() {
+            updateCurrentHash();
+            
+            // 监听hash变化
+            window.addEventListener('hashchange', function() {
+                updateCurrentHash();
+            });
+        };
+    </script>
+</body>
+</html>

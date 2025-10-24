@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">SQL注入演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .demo-card {
+            transition: transform 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .demo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+        .danger-badge {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+        }
+        .payload-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .code-block {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Java Security Lab
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/sqli">SQL注入</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/h2-console" target="_blank">数据库控制台</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 页面标题 -->
+    <div class="bg-danger text-white py-4">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><i class="fas fa-database"></i> SQL注入漏洞演示</h1>
+                    <p class="lead mb-0">学习SQL注入攻击原理和防护方法</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <span class="badge danger-badge fs-6">高危漏洞</span>
+                    <span class="badge bg-secondary fs-6">OWASP Top 10</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container my-5">
+        <!-- 漏洞介绍 -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h3><i class="fas fa-info-circle text-primary"></i> 什么是SQL注入？</h3>
+                        <p>SQL注入（SQL Injection）是一种代码注入技术，攻击者通过在应用程序的输入字段中插入恶意SQL代码，来操纵后端数据库执行非预期的SQL命令。</p>
+                        
+                        <h5>常见的SQL注入类型：</h5>
+                        <ul>
+                            <li><strong>联合查询注入（Union-based）：</strong>使用UNION操作符获取其他表的数据</li>
+                            <li><strong>布尔盲注（Boolean-based blind）：</strong>根据页面返回的真假判断数据库信息</li>
+                            <li><strong>时间盲注（Time-based blind）：</strong>通过延时函数判断注入是否成功</li>
+                            <li><strong>报错注入（Error-based）：</strong>通过数据库报错信息获取数据</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 演示模块 -->
+        <div class="row g-4">
+            <!-- 登录注入演示 -->
+            <div class="col-md-6">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-sign-in-alt text-danger"></i> 登录绕过演示
+                        </h5>
+                        <p class="card-text">演示通过SQL注入绕过登录验证，获取未授权访问。</p>
+                        
+                        <div class="payload-box">
+                            <strong>常用Payload：</strong><br>
+                            <code>admin' OR '1'='1' --</code><br>
+                            <code>admin' OR 1=1 #</code><br>
+                            <code>' OR ''=''</code>
+                        </div>
+                        
+                        <a href="/sqli/login" class="btn btn-danger">开始演示</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 搜索注入演示 -->
+            <div class="col-md-6">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-search text-warning"></i> 搜索注入演示
+                        </h5>
+                        <p class="card-text">演示在搜索功能中进行SQL注入，获取敏感数据。</p>
+                        
+                        <div class="payload-box">
+                            <strong>常用Payload：</strong><br>
+                            <code>' UNION SELECT id,username,password,email,role FROM users --</code><br>
+                            <code>%' OR 1=1 --</code>
+                        </div>
+                        
+                        <a href="/sqli/search" class="btn btn-warning">开始演示</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 高级注入演示 -->
+            <div class="col-md-12">
+                <div class="card demo-card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-code text-info"></i> 高级SQL注入演示
+                        </h5>
+                        <p class="card-text">自定义SQL查询执行，演示更复杂的SQL注入技术。</p>
+                        
+                        <div class="payload-box">
+                            <strong>高级Payload示例：</strong><br>
+                            <code>SELECT * FROM users WHERE id = 1; DROP TABLE users; --</code><br>
+                            <code>SELECT database(), user(), version()</code><br>
+                            <code>SELECT table_name FROM information_schema.tables</code>
+                        </div>
+                        
+                        <a href="/sqli/advanced" class="btn btn-info">开始演示</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护措施 -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h4><i class="fas fa-shield-alt"></i> SQL注入防护措施</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>1. 使用参数化查询</h5>
+                                <div class="code-block">
+                                    <pre><code>// 不安全的写法
+String sql = "SELECT * FROM users WHERE username = '" + username + "'";
+
+// 安全的写法
+String sql = "SELECT * FROM users WHERE username = ?";
+PreparedStatement stmt = conn.prepareStatement(sql);
+stmt.setString(1, username);</code></pre>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>2. 输入验证和过滤</h5>
+                                <ul>
+                                    <li>验证输入数据类型和格式</li>
+                                    <li>过滤特殊字符（如单引号、分号等）</li>
+                                    <li>使用白名单验证</li>
+                                    <li>限制输入长度</li>
+                                </ul>
+                                
+                                <h5>3. 最小权限原则</h5>
+                                <ul>
+                                    <li>数据库用户权限最小化</li>
+                                    <li>禁用不必要的数据库功能</li>
+                                    <li>使用存储过程</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 测试数据说明 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-database"></i> 测试数据说明</h5>
+                    <p>系统已预置以下测试用户数据：</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul>
+                                <li>admin / admin123 (管理员)</li>
+                                <li>john / password123 (普通用户)</li>
+                                <li>alice / alice456 (普通用户)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul>
+                                <li>bob / bob789 (普通用户)</li>
+                                <li>manager / manager123 (经理)</li>
+                                <li>secret / topsecret (机密用户)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="mb-0">你可以使用这些账户进行测试，或者尝试SQL注入绕过登录验证。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Java Security Lab. 仅用于教育目的.</p>
+            <p>
+                <i class="fas fa-exclamation-triangle text-warning"></i>
+                请勿在生产环境中使用本实验室的代码！
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+</body>
+</html>

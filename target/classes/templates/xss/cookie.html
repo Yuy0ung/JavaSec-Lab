@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie XSS演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-demo { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-demo { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .result-box { min-height: 100px; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa; }
+        .cookie-display { background-color: #e9ecef; padding: 10px; border-radius: 5px; font-family: monospace; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xss">XSS主页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">Cookie XSS演示</h1>
+                
+                <!-- 说明部分 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> 什么是Cookie XSS？</h5>
+                    <p>Cookie XSS是指通过Cookie值传递恶意脚本，当应用程序读取Cookie并将其内容输出到页面时，恶意脚本得以执行。这种攻击常见于个性化设置、用户偏好、购物车内容等功能。</p>
+                    <p><strong>攻击流程：</strong> 设置恶意Cookie → 应用读取Cookie → 输出到页面 → 恶意脚本执行</p>
+                    <p><strong>特点：</strong> 攻击载荷持久化存储在客户端，每次访问都会触发</p>
+                </div>
+
+                <!-- 当前Cookie显示 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>当前页面Cookie</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="cookie-display" id="currentCookies">
+                                    正在加载Cookie信息...
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-primary btn-sm" onclick="refreshCookies()">刷新Cookie显示</button>
+                                <button class="btn btn-outline-danger btn-sm mt-2" onclick="clearAllCookies()">清除所有Cookie</button>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>服务器端Cookie处理：</h6>
+                            <div class="result-box">
+                                <div th:if="${#httpServletRequest.cookies != null}">
+                                    <div th:each="cookie : ${#httpServletRequest.cookies}">
+                                        <strong th:text="${cookie.name}">Cookie名</strong>: 
+                                        <span th:text="${cookie.value}">Cookie值</span><br>
+                                    </div>
+                                </div>
+                                <div th:if="${#httpServletRequest.cookies == null}">
+                                    无Cookie信息
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 常见载荷 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>常见Cookie XSS载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>基础载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;script&gt;alert('Cookie XSS')&lt;/script&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;img src=x onerror=alert('XSS')&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;svg onload=alert(document.cookie)&gt;</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>高级载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;script&gt;fetch('/steal?data='+document.cookie)&lt;/script&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;iframe src="javascript:alert('XSS')"&gt;&lt;/iframe&gt;</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>&lt;body onload=eval(atob('YWxlcnQoJ1hTUycp'))&gt;</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cookie设置工具 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Cookie设置工具</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label for="cookieName" class="form-label">Cookie名称：</label>
+                                    <input type="text" class="form-control" id="cookieName" 
+                                           value="username" placeholder="输入Cookie名称...">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cookieValue" class="form-label">Cookie值：</label>
+                                    <input type="text" class="form-control" id="cookieValue" 
+                                           placeholder="输入Cookie值...">
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="cookieExpires" class="form-label">过期时间（天）：</label>
+                                            <input type="number" class="form-control" id="cookieExpires" 
+                                                   value="1" min="0" max="365">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">安全选项：</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="httpOnly">
+                                                <label class="form-check-label" for="httpOnly">HttpOnly</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="secure">
+                                                <label class="form-check-label" for="secure">Secure</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>操作：</h6>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" onclick="setCookie()">
+                                        设置Cookie
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteCookie()">
+                                        删除Cookie
+                                    </button>
+                                </div>
+                                
+                                <h6 class="mt-3">快速载荷：</h6>
+                                <div class="d-grid gap-1">
+                                    <button class="btn btn-outline-danger btn-sm" onclick="setPayload('&lt;script&gt;alert(\'Cookie XSS!\')&lt;/script&gt;')">
+                                        Script XSS
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" onclick="setPayload('&lt;img src=x onerror=alert(\'Image XSS!\')&gt;')">
+                                        Image XSS
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" onclick="setPayload('&lt;svg onload=alert(\'SVG XSS!\')&gt;')">
+                                        SVG XSS
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" onclick="setPayload('正常用户名')">
+                                        正常值
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 演示区域 -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card vulnerability-demo mb-4">
+                            <div class="card-header bg-warning">
+                                <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 漏洞演示 - 直接输出Cookie</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-danger"><strong>危险：</strong> 直接将Cookie值输出到页面</p>
+                                
+                                <!-- 服务器端处理 -->
+                                <div class="mb-3">
+                                    <h6>服务器端处理（危险）：</h6>
+                                    <div class="result-box">
+                                        <div th:if="${#httpServletRequest.cookies != null}">
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'username'}">
+                                                欢迎用户：<span th:utext="${cookie.value}">用户名</span>
+                                            </div>
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'preference'}">
+                                                用户偏好：<span th:utext="${cookie.value}">偏好设置</span>
+                                            </div>
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'theme'}">
+                                                主题设置：<span th:utext="${cookie.value}">主题</span>
+                                            </div>
+                                        </div>
+                                        <div th:if="${#httpServletRequest.cookies == null}">
+                                            无相关Cookie
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 客户端JavaScript处理 -->
+                                <div class="mb-3">
+                                    <h6>客户端JavaScript处理（危险）：</h6>
+                                    <button class="btn btn-danger btn-sm" onclick="vulnerableCookieProcessing()">
+                                        处理Cookie（危险）
+                                    </button>
+                                    <div id="vulnerableResult" class="result-box mt-2">
+                                        JavaScript处理结果将显示在这里...
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <h6>快速测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="testCookieXSS('username', '&lt;script&gt;alert(\'Username XSS!\')&lt;/script&gt;')">
+                                            测试username Cookie XSS
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="testCookieXSS('preference', '&lt;img src=x onerror=alert(\'Preference XSS!\')&gt;')">
+                                            测试preference Cookie XSS
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="testCookieXSS('theme', '&lt;svg onload=alert(\'Theme XSS!\')&gt;')">
+                                            测试theme Cookie XSS
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card safe-demo mb-4">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 安全版本 - Cookie验证</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-success"><strong>安全：</strong> 对Cookie值进行验证和转义</p>
+                                
+                                <!-- 安全的服务器端处理 -->
+                                <div class="mb-3">
+                                    <h6>服务器端安全处理：</h6>
+                                    <div class="result-box">
+                                        <div th:if="${#httpServletRequest.cookies != null}">
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'username'}">
+                                                欢迎用户：<span th:text="${cookie.value}">用户名</span>
+                                            </div>
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'preference'}">
+                                                用户偏好：<span th:text="${cookie.value}">偏好设置</span>
+                                            </div>
+                                            <div th:each="cookie : ${#httpServletRequest.cookies}" th:if="${cookie.name == 'theme'}">
+                                                主题设置：<span th:text="${cookie.value}">主题</span>
+                                            </div>
+                                        </div>
+                                        <div th:if="${#httpServletRequest.cookies == null}">
+                                            无相关Cookie
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 安全的客户端处理 -->
+                                <div class="mb-3">
+                                    <h6>客户端安全处理：</h6>
+                                    <button class="btn btn-success btn-sm" onclick="safeCookieProcessing()">
+                                        安全处理Cookie
+                                    </button>
+                                    <div id="safeResult" class="result-box mt-2">
+                                        安全处理结果将显示在这里...
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <h6>安全测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-success btn-sm" onclick="testSafeCookie('username', '正常用户名')">
+                                            设置正常username
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="testSafeCookie('preference', '深色主题')">
+                                            设置正常preference
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="testSafeCookie('theme', 'blue')">
+                                            设置正常theme
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cookie安全配置演示 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Cookie安全配置演示</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">不安全的Cookie设置：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>
+document.cookie = "username=&lt;script&gt;alert('XSS')&lt;/script&gt;";<br>
+// 没有HttpOnly，可被JavaScript访问<br>
+// 没有Secure，可通过HTTP传输<br>
+// 没有SameSite，容易受到CSRF攻击
+                                    </code>
+                                </div>
+                                <button class="btn btn-danger btn-sm" onclick="setUnsafeCookie()">
+                                    设置不安全Cookie
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success">安全的Cookie设置：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>
+// 服务器端设置（推荐）<br>
+Set-Cookie: username=safe_value; HttpOnly; Secure; SameSite=Strict<br><br>
+// 客户端安全设置<br>
+document.cookie = "username=safe_value; Secure; SameSite=Strict";
+                                    </code>
+                                </div>
+                                <button class="btn btn-success btn-sm" onclick="setSafeCookie()">
+                                    设置安全Cookie
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>Cookie安全属性说明：</h6>
+                            <ul>
+                                <li><strong>HttpOnly：</strong> 防止JavaScript访问Cookie，减少XSS攻击风险</li>
+                                <li><strong>Secure：</strong> 只在HTTPS连接中传输Cookie</li>
+                                <li><strong>SameSite：</strong> 防止跨站请求伪造(CSRF)攻击</li>
+                                <li><strong>Path：</strong> 限制Cookie的作用路径</li>
+                                <li><strong>Domain：</strong> 限制Cookie的作用域名</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代码对比 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>代码实现对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">漏洞代码：</h6>
+                                <pre><code class="language-html"><!-- 服务器端：直接输出 -->
+&lt;div th:utext="${cookie.value}"&gt;&lt;/div&gt;
+
+<!-- 客户端：直接处理 -->
+&lt;script&gt;
+function displayUsername() {
+    var username = getCookie('username');
+    document.getElementById('user').innerHTML = username;
+}
+&lt;/script&gt;</code></pre>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success">安全代码：</h6>
+                                <pre><code class="language-html"><!-- 服务器端：HTML转义 -->
+&lt;div th:text="${cookie.value}"&gt;&lt;/div&gt;
+
+<!-- 客户端：安全处理 -->
+&lt;script&gt;
+function safeDisplayUsername() {
+    var username = getCookie('username');
+    if (isValidUsername(username)) {
+        document.getElementById('user').textContent = username;
+    }
+}
+&lt;/script&gt;</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护建议 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> Cookie XSS防护建议</h5>
+                    <ul class="mb-0">
+                        <li><strong>输入验证：</strong> 验证所有Cookie值的格式和内容</li>
+                        <li><strong>输出编码：</strong> 对输出到HTML的Cookie值进行编码</li>
+                        <li><strong>HttpOnly标志：</strong> 设置HttpOnly防止JavaScript访问敏感Cookie</li>
+                        <li><strong>Secure标志：</strong> 在HTTPS环境中设置Secure标志</li>
+                        <li><strong>SameSite属性：</strong> 设置SameSite防止CSRF攻击</li>
+                        <li><strong>Cookie加密：</strong> 对敏感Cookie值进行加密存储</li>
+                        <li><strong>定期清理：</strong> 定期清理过期和无效的Cookie</li>
+                    </ul>
+                </div>
+
+                <!-- 学习提示 -->
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-lightbulb"></i> Cookie XSS检测技巧</h5>
+                    <ul class="mb-0">
+                        <li><strong>Cookie枚举：</strong> 测试所有可能被应用程序使用的Cookie</li>
+                        <li><strong>持久化测试：</strong> 验证恶意Cookie在页面刷新后是否仍然有效</li>
+                        <li><strong>编码绕过：</strong> 尝试不同的编码方式绕过过滤</li>
+                        <li><strong>长度测试：</strong> 测试超长Cookie值的处理</li>
+                        <li><strong>特殊字符：</strong> 测试各种特殊字符和控制字符</li>
+                        <li><strong>跨域测试：</strong> 测试Cookie在不同域名下的行为</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // 刷新Cookie显示
+        function refreshCookies() {
+            var cookies = document.cookie;
+            if (cookies) {
+                document.getElementById('currentCookies').textContent = cookies;
+            } else {
+                document.getElementById('currentCookies').textContent = '无Cookie';
+            }
+        }
+        
+        // 清除所有Cookie
+        function clearAllCookies() {
+            var cookies = document.cookie.split(";");
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i];
+                var eqPos = cookie.indexOf("=");
+                var name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+            }
+            refreshCookies();
+            alert('所有Cookie已清除');
+        }
+        
+        // 设置Cookie
+        function setCookie() {
+            var name = document.getElementById('cookieName').value;
+            var value = document.getElementById('cookieValue').value;
+            var expires = document.getElementById('cookieExpires').value;
+            var httpOnly = document.getElementById('httpOnly').checked;
+            var secure = document.getElementById('secure').checked;
+            
+            if (!name || !value) {
+                alert('请输入Cookie名称和值');
+                return;
+            }
+            
+            var date = new Date();
+            date.setTime(date.getTime() + (expires * 24 * 60 * 60 * 1000));
+            
+            var cookieString = name + "=" + value + ";expires=" + date.toUTCString() + ";path=/";
+            
+            if (secure) {
+                cookieString += ";Secure";
+            }
+            
+            // 注意：HttpOnly只能在服务器端设置，客户端JavaScript无法设置HttpOnly
+            if (httpOnly) {
+                alert('注意：HttpOnly标志只能在服务器端设置，此处仅为演示');
+            }
+            
+            document.cookie = cookieString;
+            refreshCookies();
+            alert('Cookie已设置');
+        }
+        
+        // 删除Cookie
+        function deleteCookie() {
+            var name = document.getElementById('cookieName').value;
+            if (!name) {
+                alert('请输入要删除的Cookie名称');
+                return;
+            }
+            
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+            refreshCookies();
+            alert('Cookie已删除');
+        }
+        
+        // 获取Cookie值
+        function getCookie(name) {
+            var nameEQ = name + "=";
+            var ca = document.cookie.split(';');
+            for (var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+        
+        // 设置载荷
+        function setPayload(payload) {
+            document.getElementById('cookieValue').value = payload;
+        }
+        
+        // 漏洞的Cookie处理
+        function vulnerableCookieProcessing() {
+            var result = '';
+            var cookies = ['username', 'preference', 'theme'];
+            
+            cookies.forEach(function(cookieName) {
+                var value = getCookie(cookieName);
+                if (value) {
+                    result += cookieName + ': ' + value + '<br>';
+                }
+            });
+            
+            if (result === '') {
+                result = '无相关Cookie';
+            }
+            
+            // 危险：直接使用innerHTML
+            document.getElementById('vulnerableResult').innerHTML = '处理结果：<br>' + result;
+        }
+        
+        // 安全的Cookie处理
+        function safeCookieProcessing() {
+            var result = '';
+            var cookies = ['username', 'preference', 'theme'];
+            
+            cookies.forEach(function(cookieName) {
+                var value = getCookie(cookieName);
+                if (value && isValidCookieValue(value)) {
+                    result += cookieName + ': ' + escapeHtml(value) + '\n';
+                }
+            });
+            
+            if (result === '') {
+                result = '无有效Cookie';
+            }
+            
+            // 安全：使用textContent
+            document.getElementById('safeResult').textContent = '安全处理结果：\n' + result;
+        }
+        
+        // HTML转义函数
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Cookie值验证
+        function isValidCookieValue(value) {
+            // 简单验证：不包含HTML标签和JavaScript
+            return !/<[^>]*>/g.test(value) && !/javascript:/i.test(value) && !/on\w+=/i.test(value);
+        }
+        
+        // 测试Cookie XSS
+        function testCookieXSS(name, value) {
+            document.cookie = name + "=" + value + ";path=/";
+            refreshCookies();
+            setTimeout(function() {
+                vulnerableCookieProcessing();
+            }, 100);
+        }
+        
+        // 测试安全Cookie
+        function testSafeCookie(name, value) {
+            document.cookie = name + "=" + value + ";path=/";
+            refreshCookies();
+            setTimeout(function() {
+                safeCookieProcessing();
+            }, 100);
+        }
+        
+        // 设置不安全Cookie
+        function setUnsafeCookie() {
+            document.cookie = "unsafe_test=<script>alert('Unsafe Cookie XSS!')</script>;path=/";
+            refreshCookies();
+            alert('不安全Cookie已设置');
+        }
+        
+        // 设置安全Cookie
+        function setSafeCookie() {
+            document.cookie = "safe_test=safe_value;path=/;SameSite=Strict";
+            refreshCookies();
+            alert('安全Cookie已设置');
+        }
+        
+        // 页面加载时初始化
+        window.onload = function() {
+            refreshCookies();
+        };
+    </script>
+</body>
+</html>

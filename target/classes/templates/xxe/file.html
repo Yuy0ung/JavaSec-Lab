@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件读取XXE攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .code-block { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: 'Courier New', monospace; }
+        .vulnerable { border-left: 4px solid #dc3545; }
+        .safe { border-left: 4px solid #28a745; }
+        .result-box { min-height: 100px; max-height: 400px; overflow-y: auto; }
+        .file-item { cursor: pointer; transition: background-color 0.2s; }
+        .file-item:hover { background-color: #f8f9fa; }
+        .xml-input { font-family: 'Courier New', monospace; }
+        .file-content { background-color: #2d3748; color: #e2e8f0; font-family: 'Courier New', monospace; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xxe">XXE首页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h2><i class="fas fa-file-alt text-danger"></i> 文件读取XXE攻击演示</h2>
+                <p class="lead">演示通过XXE攻击读取服务器本地文件的技术和防护方法</p>
+            </div>
+        </div>
+
+        <!-- 文件读取攻击原理 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-info-circle"></i> 文件读取攻击原理</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>攻击流程：</h6>
+                                <ol>
+                                    <li>构造包含file://协议的外部实体</li>
+                                    <li>指定要读取的目标文件路径</li>
+                                    <li>XML解析器加载外部实体时读取文件</li>
+                                    <li>文件内容被包含在解析结果中返回</li>
+                                </ol>
+                                
+                                <h6>常见目标文件：</h6>
+                                <ul>
+                                    <li><code>/etc/passwd</code> - 系统用户信息</li>
+                                    <li><code>/etc/shadow</code> - 用户密码哈希</li>
+                                    <li><code>/proc/version</code> - 系统版本信息</li>
+                                    <li><code>/etc/hosts</code> - 主机映射文件</li>
+                                    <li>应用配置文件 - 数据库连接等</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>文件读取载荷示例：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE root [
+  &lt;!ENTITY file SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;root&gt;
+  &lt;data&gt;&amp;file;&lt;/data&gt;
+&lt;/root&gt;</code></pre>
+                                </div>
+                                
+                                <div class="alert alert-danger mt-3">
+                                    <small><i class="fas fa-exclamation-triangle"></i> 
+                                    此载荷会尝试读取/etc/passwd文件内容，可能泄露系统用户信息</small>
+                                </div>
+                                
+                                <h6>危害等级：</h6>
+                                <div class="progress">
+                                    <div class="progress-bar bg-danger" style="width: 90%">极高风险</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文件读取攻击演示 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card vulnerable">
+                    <div class="card-header bg-danger text-white">
+                        <h5><i class="fas fa-file-alt"></i> 文件读取攻击</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="fileAttackForm">
+                            <div class="mb-3">
+                                <label for="targetFile" class="form-label">目标文件路径：</label>
+                                <input type="text" class="form-control" id="targetFile" value="/etc/passwd" placeholder="输入要读取的文件路径">
+                            </div>
+                            <div class="mb-3">
+                                <label for="attackXml" class="form-label">XXE载荷：</label>
+                                <textarea class="form-control xml-input" id="attackXml" rows="8" readonly></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-bug"></i> 执行文件读取攻击
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="generatePayload()">
+                                <i class="fas fa-sync-alt"></i> 生成载荷
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>攻击结果：</h6>
+                            <div id="attackResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待攻击执行...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card safe">
+                    <div class="card-header bg-success text-white">
+                        <h5><i class="fas fa-shield-alt"></i> 安全防护测试</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="safeTestForm">
+                            <div class="mb-3">
+                                <label for="safeXml" class="form-label">XML输入：</label>
+                                <textarea class="form-control xml-input" id="safeXml" rows="8" placeholder="输入XML内容进行安全测试..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-shield-alt"></i> 安全解析测试
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="copySafePayload()">
+                                <i class="fas fa-copy"></i> 复制载荷
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>安全测试结果：</h6>
+                            <div id="safeResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待安全测试...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 常见目标文件 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-folder-open"></i> 常见攻击目标文件</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6>系统文件：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item file-item" onclick="selectFile('/etc/passwd')">
+                                        <strong>/etc/passwd</strong><br>
+                                        <small class="text-muted">系统用户信息</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/etc/shadow')">
+                                        <strong>/etc/shadow</strong><br>
+                                        <small class="text-muted">用户密码哈希</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/etc/hosts')">
+                                        <strong>/etc/hosts</strong><br>
+                                        <small class="text-muted">主机映射文件</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/proc/version')">
+                                        <strong>/proc/version</strong><br>
+                                        <small class="text-muted">系统版本信息</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>应用文件：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item file-item" onclick="selectFile('/var/log/apache2/access.log')">
+                                        <strong>Apache访问日志</strong><br>
+                                        <small class="text-muted">Web服务器日志</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/var/www/html/config.php')">
+                                        <strong>应用配置文件</strong><br>
+                                        <small class="text-muted">可能包含数据库密码</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/home/user/.ssh/id_rsa')">
+                                        <strong>SSH私钥</strong><br>
+                                        <small class="text-muted">用户SSH私钥文件</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('/root/.bash_history')">
+                                        <strong>命令历史</strong><br>
+                                        <small class="text-muted">用户命令执行历史</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>Windows文件：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item file-item" onclick="selectFile('C:\\Windows\\System32\\drivers\\etc\\hosts')">
+                                        <strong>Windows Hosts</strong><br>
+                                        <small class="text-muted">Windows主机文件</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('C:\\boot.ini')">
+                                        <strong>Boot配置</strong><br>
+                                        <small class="text-muted">系统启动配置</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('C:\\Windows\\win.ini')">
+                                        <strong>Windows配置</strong><br>
+                                        <small class="text-muted">Windows系统配置</small>
+                                    </div>
+                                    <div class="list-group-item file-item" onclick="selectFile('C:\\inetpub\\wwwroot\\web.config')">
+                                        <strong>IIS配置</strong><br>
+                                        <small class="text-muted">IIS Web配置文件</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 文件内容分析工具 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-search"></i> 文件内容分析工具</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fileContent" class="form-label">文件内容：</label>
+                                    <textarea class="form-control file-content" id="fileContent" rows="10" placeholder="粘贴文件内容进行分析..." style="color: #e2e8f0; background-color: #2d3748;"></textarea>
+                                </div>
+                                <button class="btn btn-primary" onclick="analyzeContent()">
+                                    <i class="fas fa-search"></i> 分析内容
+                                </button>
+                                <button class="btn btn-outline-secondary ms-2" onclick="clearContent()">
+                                    <i class="fas fa-trash"></i> 清空
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>分析结果：</h6>
+                                <div id="analysisResult" class="border p-3 result-box bg-light">
+                                    <em class="text-muted">等待内容分析...</em>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <h6>敏感信息检测：</h6>
+                                    <div id="sensitiveInfo" class="border p-3 bg-warning bg-opacity-10">
+                                        <em class="text-muted">未检测到敏感信息</em>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 代码对比 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-code"></i> 文件读取防护代码对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger"><i class="fas fa-times"></i> 存在文件读取漏洞：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 不安全的文件读取处理
+public String parseXml(String xmlContent) {
+    try {
+        DocumentBuilderFactory factory = 
+            DocumentBuilderFactory.newInstance();
+        
+        // 未禁用外部实体，存在XXE风险
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        
+        Document doc = builder.parse(
+            new InputSource(new StringReader(xmlContent)));
+        
+        // 直接返回解析结果，可能包含文件内容
+        return extractTextContent(doc);
+    } catch (Exception e) {
+        return "解析错误: " + e.getMessage();
+    }
+}</code></pre>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success"><i class="fas fa-check"></i> 安全的文件读取防护：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 安全的XML解析，防止文件读取
+public String parseXmlSafely(String xmlContent) {
+    try {
+        DocumentBuilderFactory factory = 
+            DocumentBuilderFactory.newInstance();
+        
+        // 禁用DOCTYPE声明
+        factory.setFeature(
+            "http://apache.org/xml/features/disallow-doctype-decl", 
+            true);
+        
+        // 禁用外部通用实体
+        factory.setFeature(
+            "http://xml.org/sax/features/external-general-entities", 
+            false);
+        
+        // 禁用外部参数实体
+        factory.setFeature(
+            "http://xml.org/sax/features/external-parameter-entities", 
+            false);
+        
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document doc = builder.parse(
+            new InputSource(new StringReader(xmlContent)));
+        
+        return extractTextContent(doc);
+    } catch (Exception e) {
+        return "安全解析失败: " + e.getMessage();
+    }
+}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护建议 -->
+        <div class="alert alert-success">
+            <h5><i class="fas fa-shield-alt"></i> 文件读取攻击防护建议</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>XML解析器配置：</h6>
+                    <ul>
+                        <li>禁用DOCTYPE声明处理</li>
+                        <li>禁用外部通用实体</li>
+                        <li>禁用外部参数实体</li>
+                        <li>禁用XInclude处理</li>
+                        <li>使用白名单验证XML结构</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>系统层面防护：</h6>
+                    <ul>
+                        <li>限制应用程序文件访问权限</li>
+                        <li>使用chroot或容器隔离</li>
+                        <li>敏感文件权限控制</li>
+                        <li>文件访问监控和审计</li>
+                        <li>定期检查文件权限配置</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 页面加载时生成初始载荷
+        document.addEventListener('DOMContentLoaded', function() {
+            generatePayload();
+        });
+        
+        // 生成XXE载荷
+        function generatePayload() {
+            const targetFile = document.getElementById('targetFile').value;
+            const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY file SYSTEM "file://${targetFile}">
+]>
+<root>
+  <data>&file;</data>
+</root>`;
+            
+            document.getElementById('attackXml').value = xmlPayload;
+            document.getElementById('safeXml').value = xmlPayload;
+        }
+        
+        // 目标文件路径变化时重新生成载荷
+        document.getElementById('targetFile').addEventListener('input', generatePayload);
+        
+        // 文件读取攻击表单提交
+        document.getElementById('fileAttackForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('attackXml').value;
+            const targetFile = document.getElementById('targetFile').value;
+            
+            document.getElementById('attackResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行攻击中...';
+            
+            fetch('/xxe/attack/file', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    xmlContent: xmlContent,
+                    targetFile: targetFile
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('attackResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6><i class="fas fa-exclamation-triangle"></i> 文件读取成功 - 存在XXE漏洞！</h6>
+                            <p><strong>目标文件：</strong> ${data.targetFile}</p>
+                            <p><strong>文件内容：</strong></p>
+                            <pre class="file-content p-2 mb-0" style="max-height: 200px; overflow-y: auto;">${data.fileContent || '文件为空或无法读取'}</pre>
+                        </div>
+                        <small class="text-muted">
+                            攻击时间: ${data.attackTime}ms | 
+                            文件大小: ${data.fileSize} bytes | 
+                            读取状态: ${data.readStatus}
+                        </small>
+                    `;
+                    
+                    // 自动分析文件内容
+                    if (data.fileContent) {
+                        document.getElementById('fileContent').value = data.fileContent;
+                        analyzeContent();
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-exclamation-circle"></i> 攻击失败</h6>
+                            <p><strong>失败原因：</strong> ${data.error}</p>
+                            <p><strong>目标文件：</strong> ${data.targetFile}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('attackResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 安全测试表单提交
+        document.getElementById('safeTestForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('safeXml').value;
+            
+            if (!xmlContent.trim()) {
+                alert('请输入XML内容');
+                return;
+            }
+            
+            document.getElementById('safeResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 安全测试中...';
+            
+            fetch('/xxe/parse/safe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ xmlContent: xmlContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('safeResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <h6><i class="fas fa-shield-alt"></i> 安全解析成功</h6>
+                            <p><strong>解析结果：</strong></p>
+                            <pre class="mb-0">${data.result || '无内容返回'}</pre>
+                        </div>
+                        <small class="text-muted">解析时间: ${data.parseTime}ms | 安全检查: 已启用</small>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt"></i> 安全防护生效</h6>
+                            <p><strong>拦截原因：</strong> ${data.error}</p>
+                            <p class="mb-0"><small>安全配置成功阻止了文件读取攻击</small></p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('safeResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 选择目标文件
+        function selectFile(filePath) {
+            document.getElementById('targetFile').value = filePath;
+            generatePayload();
+        }
+        
+        // 复制载荷到安全测试
+        function copySafePayload() {
+            const attackXml = document.getElementById('attackXml').value;
+            document.getElementById('safeXml').value = attackXml;
+        }
+        
+        // 分析文件内容
+        function analyzeContent() {
+            const content = document.getElementById('fileContent').value;
+            
+            if (!content.trim()) {
+                alert('请输入文件内容');
+                return;
+            }
+            
+            fetch('/xxe/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ content: content })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('analysisResult').innerHTML = `
+                        <h6>基本信息：</h6>
+                        <ul>
+                            <li><strong>文件类型：</strong> ${data.fileType}</li>
+                            <li><strong>行数：</strong> ${data.lineCount}</li>
+                            <li><strong>字符数：</strong> ${data.charCount}</li>
+                            <li><strong>编码：</strong> ${data.encoding}</li>
+                        </ul>
+                        <h6>内容特征：</h6>
+                        <ul>
+                            <li><strong>包含用户信息：</strong> ${data.hasUserInfo ? '是' : '否'}</li>
+                            <li><strong>包含密码哈希：</strong> ${data.hasPasswordHash ? '是' : '否'}</li>
+                            <li><strong>包含配置信息：</strong> ${data.hasConfig ? '是' : '否'}</li>
+                            <li><strong>包含路径信息：</strong> ${data.hasPath ? '是' : '否'}</li>
+                        </ul>
+                    `;
+                    
+                    // 显示敏感信息
+                    if (data.sensitiveInfo && data.sensitiveInfo.length > 0) {
+                        let sensitiveHtml = '<h6 class="text-danger">检测到敏感信息：</h6><ul>';
+                        data.sensitiveInfo.forEach(info => {
+                            sensitiveHtml += `<li><strong>${info.type}:</strong> ${info.description}</li>`;
+                        });
+                        sensitiveHtml += '</ul>';
+                        document.getElementById('sensitiveInfo').innerHTML = sensitiveHtml;
+                    } else {
+                        document.getElementById('sensitiveInfo').innerHTML = '<em class="text-success">未检测到明显的敏感信息</em>';
+                    }
+                } else {
+                    document.getElementById('analysisResult').innerHTML = `
+                        <div class="alert alert-warning">
+                            <p>分析失败: ${data.error}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('analysisResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <p>分析请求失败: ${error}</p>
+                    </div>
+                `;
+            });
+        }
+        
+        // 清空内容
+        function clearContent() {
+            document.getElementById('fileContent').value = '';
+            document.getElementById('analysisResult').innerHTML = '<em class="text-muted">等待内容分析...</em>';
+            document.getElementById('sensitiveInfo').innerHTML = '<em class="text-muted">未检测到敏感信息</em>';
+        }
+    </script>
+</body>
+</html>

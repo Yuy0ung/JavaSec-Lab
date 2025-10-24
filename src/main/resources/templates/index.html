@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Java Security Lab</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .vulnerability-section {
+            background: white;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        
+        .vulnerability-header {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .vulnerability-content {
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .result-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            background: none;
+            border: none;
+            font-size: 14px;
+        }
+        
+        .tab.active {
+            border-bottom-color: #007bff;
+            color: #007bff;
+            font-weight: 500;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            padding: 20px;
+            opacity: 0.8;
+        }
+        
+        .payload-example {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Java Security Lab</h1>
+            <p>Java 漏洞靶场 - 学习常见Web安全漏洞</p>
+        </div>
+
+        <!-- SQL注入漏洞 -->
+        <div class="vulnerability-section">
+            <div class="vulnerability-header">
+                💉 SQL 注入漏洞 (SQL Injection)
+            </div>
+            <div class="vulnerability-content">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('sql', 'jdbc')">JDBC 注入</button>
+                    <button class="tab" onclick="switchTab('sql', 'mybatis')">MyBatis 注入</button>
+                </div>
+                
+                <div id="sql-jdbc" class="tab-content active">
+                    <div class="payload-example">
+                        示例Payload: admin' OR '1'='1' --
+                    </div>
+                    <div class="form-group">
+                        <label>用户名:</label>
+                        <input type="text" id="sql-username" placeholder="输入用户名">
+                    </div>
+                    <div class="form-group">
+                        <label>密码:</label>
+                        <input type="password" id="sql-password" placeholder="输入密码">
+                    </div>
+                    <button class="btn btn-danger" onclick="testSqlJdbc()">测试 JDBC 注入</button>
+                    <div class="result-box" id="sql-jdbc-result">等待测试...</div>
+                </div>
+                
+                <div id="sql-mybatis" class="tab-content">
+                    <div class="payload-example">
+                        示例Payload: admin' UNION SELECT 'injected','data','test','HACKED' --
+                    </div>
+                    <div class="form-group">
+                        <label>搜索关键词:</label>
+                        <input type="text" id="sql-keyword" placeholder="输入搜索关键词">
+                    </div>
+                    <button class="btn btn-danger" onclick="testSqlMybatis()">测试 MyBatis 注入</button>
+                    <div class="result-box" id="sql-mybatis-result">等待测试...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- XSS漏洞 -->
+        <div class="vulnerability-section">
+            <div class="vulnerability-header">
+                🚨 跨站脚本攻击 (XSS)
+            </div>
+            <div class="vulnerability-content">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('xss', 'reflected')">反射型 XSS</button>
+                    <button class="tab" onclick="switchTab('xss', 'stored')">存储型 XSS</button>
+                </div>
+                
+                <div id="xss-reflected" class="tab-content active">
+                    <div class="payload-example">
+                        示例Payload: &lt;script&gt;alert('XSS')&lt;/script&gt;
+                    </div>
+                    <div class="form-group">
+                        <label>评论内容:</label>
+                        <textarea id="xss-comment" placeholder="输入评论内容"></textarea>
+                    </div>
+                    <button class="btn btn-danger" onclick="testReflectedXss()">测试反射型 XSS</button>
+                    <div class="result-box" id="xss-reflected-result">等待测试...</div>
+                </div>
+                
+                <div id="xss-stored" class="tab-content">
+                    <div class="payload-example">
+                        示例Payload: &lt;img src=x onerror=alert('Stored XSS')&gt;
+                    </div>
+                    <div class="form-group">
+                        <label>姓名:</label>
+                        <input type="text" id="xss-name" placeholder="输入姓名">
+                    </div>
+                    <div class="form-group">
+                        <label>留言:</label>
+                        <textarea id="xss-message" placeholder="输入留言内容"></textarea>
+                    </div>
+                    <button class="btn btn-danger" onclick="submitStoredXss()">提交留言</button>
+                    <button class="btn" onclick="getStoredMessages()">查看留言</button>
+                    <div class="result-box" id="xss-stored-result">等待测试...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SSRF漏洞 -->
+        <div class="vulnerability-section">
+            <div class="vulnerability-header">
+                🌐 服务端请求伪造 (SSRF)
+            </div>
+            <div class="vulnerability-content">
+                <div class="payload-example">
+                    示例Payload: http://localhost:8080/ssrf/admin 或 file:///etc/passwd
+                </div>
+                <div class="form-group">
+                    <label>目标URL:</label>
+                    <input type="text" id="ssrf-url" placeholder="输入要请求的URL">
+                </div>
+                <button class="btn btn-danger" onclick="testSsrf()">测试 SSRF</button>
+                <button class="btn" onclick="setSsrfPayload('http://localhost:8080/ssrf/admin')">内网探测</button>
+                <button class="btn" onclick="setSsrfPayload('file:///etc/passwd')">文件读取</button>
+                <div class="result-box" id="ssrf-result">等待测试...</div>
+            </div>
+        </div>
+
+        <!-- XXE漏洞 -->
+        <div class="vulnerability-section">
+            <div class="vulnerability-header">
+                📄 XML 外部实体注入 (XXE)
+            </div>
+            <div class="vulnerability-content">
+                <div class="form-group">
+                    <label>XML 内容:</label>
+                    <textarea id="xxe-xml" placeholder="输入XML内容"></textarea>
+                </div>
+                <button class="btn btn-danger" onclick="testXxe()">测试 XXE</button>
+                <button class="btn" onclick="setXxePayload()">设置 XXE Payload</button>
+                <div class="result-box" id="xxe-result">等待测试...</div>
+            </div>
+        </div>
+
+        <!-- 命令执行漏洞 -->
+        <div class="vulnerability-section">
+            <div class="vulnerability-header">
+                ⚡ 命令执行漏洞 (RCE)
+            </div>
+            <div class="vulnerability-content">
+                <div class="payload-example">
+                    示例Payload: whoami 或 ls -la /etc
+                </div>
+                <div class="form-group">
+                    <label>系统命令:</label>
+                    <input type="text" id="rce-command" placeholder="输入要执行的命令">
+                </div>
+                <button class="btn btn-danger" onclick="testRce()">执行命令</button>
+                <button class="btn" onclick="setRcePayload('whoami')">whoami</button>
+                <button class="btn" onclick="setRcePayload('ls -la')">ls -la</button>
+                <div class="result-box" id="rce-result">等待测试...</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>⚠️ 本靶场仅用于安全学习和测试，请勿用于非法用途</p>
+            <p>© 2024 Java Security Lab. 学习网络安全，共建安全网络。</p>
+        </div>
+    </div>
+
+    <script>
+        // 切换标签页
+        function switchTab(section, tab) {
+            // 隐藏所有标签内容
+            const contents = document.querySelectorAll(`#${section}-${tab}`).forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 移除所有标签的active类
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            
+            // 显示选中的标签内容
+            document.getElementById(`${section}-${tab}`).classList.add('active');
+            
+            // 激活选中的标签
+            event.target.classList.add('active');
+        }
+
+        // SQL注入 - JDBC测试
+        async function testSqlJdbc() {
+            const username = document.getElementById('sql-username').value;
+            const password = document.getElementById('sql-password').value;
+            const resultBox = document.getElementById('sql-jdbc-result');
+            
+            try {
+                resultBox.textContent = '正在测试...';
+                const response = await fetch('/sqli/jdbc/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                const result = await response.text();
+                resultBox.textContent = result;
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // SQL注入 - MyBatis测试
+        async function testSqlMybatis() {
+            const keyword = document.getElementById('sql-keyword').value;
+            const resultBox = document.getElementById('sql-mybatis-result');
+            
+            try {
+                resultBox.textContent = '正在测试...';
+                const response = await fetch('/sqli/mybatis/search?keyword=' + encodeURIComponent(keyword));
+                const result = await response.text();
+                resultBox.textContent = result;
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // XSS - 反射型测试
+        async function testReflectedXss() {
+            const comment = document.getElementById('xss-comment').value;
+            const resultBox = document.getElementById('xss-reflected-result');
+            
+            try {
+                resultBox.textContent = '正在测试...';
+                const response = await fetch('/xss/reflected', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ input: comment })
+                });
+                const result = await response.text();
+                resultBox.innerHTML = result; // 使用innerHTML以显示XSS效果
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // XSS - 存储型提交
+        async function submitStoredXss() {
+            const name = document.getElementById('xss-name').value;
+            const message = document.getElementById('xss-message').value;
+            const resultBox = document.getElementById('xss-stored-result');
+            
+            try {
+                resultBox.textContent = '正在提交...';
+                const response = await fetch('/xss/stored', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, message })
+                });
+                const result = await response.text();
+                resultBox.textContent = '留言提交成功: ' + result;
+                
+                // 清空表单
+                document.getElementById('xss-name').value = '';
+                document.getElementById('xss-message').value = '';
+            } catch (error) {
+                resultBox.textContent = '提交失败: ' + error.message;
+            }
+        }
+
+        // 获取存储的XSS消息
+        async function getStoredMessages() {
+            const resultBox = document.getElementById('xss-stored-result');
+            
+            try {
+                resultBox.textContent = '正在获取...';
+                const response = await fetch('/xss/messages');
+                const result = await response.text();
+                resultBox.innerHTML = result; // 使用innerHTML以显示XSS效果
+            } catch (error) {
+                resultBox.textContent = '获取失败: ' + error.message;
+            }
+        }
+
+        // SSRF测试
+        async function testSsrf() {
+            const url = document.getElementById('ssrf-url').value;
+            const resultBox = document.getElementById('ssrf-result');
+            
+            try {
+                resultBox.textContent = '正在测试...';
+                const response = await fetch('/ssrf/fetch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url })
+                });
+                const result = await response.text();
+                resultBox.textContent = result;
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 设置SSRF Payload
+        function setSsrfPayload(payload) {
+            document.getElementById('ssrf-url').value = payload;
+        }
+
+        // XXE测试
+        async function testXxe() {
+            const xml = document.getElementById('xxe-xml').value;
+            const resultBox = document.getElementById('xxe-result');
+            
+            try {
+                resultBox.textContent = '正在测试...';
+                const response = await fetch('/xxe/parse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/xml'
+                    },
+                    body: xml
+                });
+                const result = await response.text();
+                resultBox.textContent = result;
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 设置XXE Payload
+        function setXxePayload() {
+            const payload = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+<!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<root>
+    <data>&xxe;</data>
+</root>`;
+            document.getElementById('xxe-xml').value = payload;
+        }
+
+        // 命令执行测试
+        async function testRce() {
+            const command = document.getElementById('rce-command').value;
+            const resultBox = document.getElementById('rce-result');
+            
+            try {
+                resultBox.textContent = '正在执行...';
+                const response = await fetch('/rce/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ command })
+                });
+                const result = await response.text();
+                resultBox.textContent = result;
+            } catch (error) {
+                resultBox.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 设置RCE Payload
+        function setRcePayload(payload) {
+            document.getElementById('rce-command').value = payload;
+        }
+    </script>
+</body>
+</html>

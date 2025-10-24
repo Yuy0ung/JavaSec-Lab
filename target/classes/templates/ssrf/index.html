@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSRF服务端请求伪造演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .attack-card { border-left: 4px solid #dc3545; }
+        .demo-card { border-left: 4px solid #0d6efd; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .danger-zone { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .info-box { background-color: #e7f3ff; border: 1px solid #b3d9ff; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">SSRF 服务端请求伪造演示</h1>
+                
+                <!-- SSRF简介 -->
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle"></i> 什么是SSRF？</h5>
+                    <p><strong>SSRF（Server-Side Request Forgery）</strong>是一种由攻击者构造形成由服务端发起请求的安全漏洞。</p>
+                    <p>攻击者可以利用SSRF漏洞让服务器向任意地址发起请求，从而：</p>
+                    <ul class="mb-0">
+                        <li>扫描内网服务和端口</li>
+                        <li>读取本地文件</li>
+                        <li>获取云服务元数据</li>
+                        <li>绕过防火墙访问内网资源</li>
+                        <li>进行拒绝服务攻击</li>
+                    </ul>
+                </div>
+
+                <!-- 攻击影响 -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card attack-card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger"><i class="fas fa-network-wired"></i> 内网探测</h6>
+                                <p class="card-text">扫描内网服务、端口，获取网络拓扑信息</p>
+                                <small class="text-muted">危害等级: 高</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card attack-card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger"><i class="fas fa-cloud"></i> 云服务攻击</h6>
+                                <p class="card-text">获取云服务实例元数据，泄露敏感配置</p>
+                                <small class="text-muted">危害等级: 极高</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card attack-card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-danger"><i class="fas fa-file-alt"></i> 文件读取</h6>
+                                <p class="card-text">利用file协议读取服务器本地文件</p>
+                                <small class="text-muted">危害等级: 高</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 演示模块 -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card demo-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-globe"></i> 基础SSRF攻击</h5>
+                                <p class="card-text">演示基本的SSRF攻击技术，包括内网扫描、端口探测等</p>
+                                <a href="/ssrf/basic" class="btn btn-primary">开始演示</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card demo-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-link"></i> 协议利用攻击</h5>
+                                <p class="card-text">利用不同协议（file、ftp、gopher等）进行SSRF攻击</p>
+                                <a href="/ssrf/protocol" class="btn btn-primary">开始演示</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card demo-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-mask"></i> 绕过技术演示</h5>
+                                <p class="card-text">演示各种SSRF防护绕过技术和方法</p>
+                                <a href="/ssrf/bypass" class="btn btn-primary">开始演示</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card demo-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-cloud-upload-alt"></i> 云服务攻击</h5>
+                                <p class="card-text">针对AWS、阿里云等云服务的SSRF攻击演示</p>
+                                <a href="/ssrf/cloud" class="btn btn-primary">开始演示</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 常见SSRF载荷 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>常见SSRF攻击载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>内网扫描载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://127.0.0.1:22</code> - 本地SSH服务
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://192.168.1.1:80</code> - 内网HTTP服务
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://10.0.0.1:3306</code> - 内网MySQL服务
+                                </div>
+                                
+                                <h6>协议利用载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>file:///etc/passwd</code> - 读取系统文件
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>ftp://192.168.1.1:21</code> - FTP协议探测
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>云服务元数据：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://169.254.169.254/latest/meta-data/</code> - AWS元数据
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://100.100.100.200/latest/meta-data/</code> - 阿里云元数据
+                                </div>
+                                
+                                <h6>绕过技术载荷：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://2130706433/</code> - IP十进制绕过
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://0x7f000001/</code> - IP十六进制绕过
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://localhost.evil.com/</code> - 域名绕过
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SSRF类型 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>SSRF攻击类型</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="info-box p-3 mb-3">
+                                    <h6><i class="fas fa-eye"></i> 有回显SSRF</h6>
+                                    <p>攻击者可以看到服务器请求的响应内容，危害更大</p>
+                                    <small class="text-muted">可直接获取内网服务信息</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="info-box p-3 mb-3">
+                                    <h6><i class="fas fa-eye-slash"></i> 无回显SSRF</h6>
+                                    <p>攻击者无法看到响应内容，但仍可进行探测</p>
+                                    <small class="text-muted">通过时间延迟等方式判断</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="info-box p-3 mb-3">
+                                    <h6><i class="fas fa-clock"></i> 半盲SSRF</h6>
+                                    <p>可以获得部分响应信息，如状态码、响应时间等</p>
+                                    <small class="text-muted">通过状态码判断服务存在</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护建议 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> SSRF防护建议</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>输入验证：</h6>
+                            <ul>
+                                <li>URL格式验证</li>
+                                <li>协议白名单（仅允许http/https）</li>
+                                <li>域名白名单</li>
+                                <li>IP地址黑名单（内网IP）</li>
+                                <li>端口限制（仅允许80/443）</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>网络层防护：</h6>
+                            <ul>
+                                <li>网络隔离和防火墙规则</li>
+                                <li>DNS解析检查</li>
+                                <li>请求超时设置</li>
+                                <li>重定向限制</li>
+                                <li>响应大小限制</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学习路径 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-graduation-cap"></i> 建议学习路径</h5>
+                    <ol class="mb-0">
+                        <li><strong>基础概念：</strong> 了解SSRF的基本原理和危害</li>
+                        <li><strong>基础攻击：</strong> 学习内网扫描和端口探测技术</li>
+                        <li><strong>协议利用：</strong> 掌握不同协议的SSRF利用方法</li>
+                        <li><strong>绕过技术：</strong> 学习各种防护绕过技术</li>
+                        <li><strong>云服务攻击：</strong> 了解云环境下的SSRF攻击</li>
+                        <li><strong>防护措施：</strong> 学习有效的SSRF防护方法</li>
+                    </ol>
+                </div>
+
+                <!-- 系统信息 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5>系统信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>服务器IP：</strong> <span id="serverIp">获取中...</span></p>
+                                <p><strong>当前时间：</strong> <span id="currentTime">获取中...</span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>网络接口：</strong> <span id="networkInfo">获取中...</span></p>
+                                <p><strong>系统版本：</strong> <span id="systemInfo">获取中...</span></p>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="refreshSystemInfo()">
+                            <i class="fas fa-sync-alt"></i> 刷新信息
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 页面加载时获取系统信息
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshSystemInfo();
+        });
+        
+        // 刷新系统信息
+        function refreshSystemInfo() {
+            // 更新当前时间
+            document.getElementById('currentTime').textContent = new Date().toLocaleString();
+            
+            // 模拟获取系统信息
+            document.getElementById('serverIp').textContent = '127.0.0.1';
+            document.getElementById('networkInfo').textContent = 'eth0, lo';
+            document.getElementById('systemInfo').textContent = 'Java Security Lab v1.0';
+        }
+    </script>
+</body>
+</html>

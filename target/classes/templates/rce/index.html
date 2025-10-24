@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCE远程命令执行演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-card { border-left: 4px solid #dc3545; }
+        .demo-card { border-left: 4px solid #0d6efd; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .danger-zone { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-zone { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4"><i class="fas fa-terminal"></i> RCE远程命令执行演示</h1>
+                
+                <!-- 漏洞介绍 -->
+                <div class="card vulnerability-card mb-4">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> 什么是RCE（Remote Code Execution）？</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>远程命令执行（RCE）</strong>是一种严重的安全漏洞，攻击者可以在目标服务器上执行任意命令或代码。</p>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-bug"></i> 常见成因：</h6>
+                                <ul>
+                                    <li>直接执行用户输入的命令</li>
+                                    <li>不安全的反序列化</li>
+                                    <li>模板注入漏洞</li>
+                                    <li>代码注入漏洞</li>
+                                    <li>文件上传后执行</li>
+                                    <li>表达式语言注入</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-crosshairs"></i> 攻击影响：</h6>
+                                <ul>
+                                    <li>完全控制服务器</li>
+                                    <li>窃取敏感数据</li>
+                                    <li>安装后门程序</li>
+                                    <li>横向渗透内网</li>
+                                    <li>破坏系统完整性</li>
+                                    <li>拒绝服务攻击</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 演示模块 -->
+                <div class="row">
+                    <div class="col-md-6 mb-4">
+                        <div class="card demo-card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-terminal"></i> 命令执行演示</h5>
+                            </div>
+                            <div class="card-body">
+                                <p>演示通过用户输入直接执行系统命令的漏洞。</p>
+                                <h6>演示内容：</h6>
+                                <ul>
+                                    <li>Runtime.exec()命令执行</li>
+                                    <li>ProcessBuilder使用</li>
+                                    <li>命令注入技巧</li>
+                                    <li>安全的命令执行方式</li>
+                                </ul>
+                                <div class="mt-3">
+                                    <a href="/rce/command" class="btn btn-primary">
+                                        <i class="fas fa-play"></i> 开始演示
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-4">
+                        <div class="card demo-card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-file-upload"></i> 文件上传执行</h5>
+                            </div>
+                            <div class="card-body">
+                                <p>演示通过上传恶意文件并执行的RCE攻击。</p>
+                                <h6>演示内容：</h6>
+                                <ul>
+                                    <li>恶意脚本上传</li>
+                                    <li>文件权限设置</li>
+                                    <li>文件类型绕过</li>
+                                    <li>安全的文件处理</li>
+                                </ul>
+                                <div class="mt-3">
+                                    <a href="/rce/file" class="btn btn-primary">
+                                        <i class="fas fa-play"></i> 开始演示
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-4">
+                        <div class="card demo-card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-code"></i> 表达式执行</h5>
+                            </div>
+                            <div class="card-body">
+                                <p>演示通过表达式语言注入执行代码的漏洞。</p>
+                                <h6>演示内容：</h6>
+                                <ul>
+                                    <li>ScriptEngine代码执行</li>
+                                    <li>SpEL表达式注入</li>
+                                    <li>OGNL表达式漏洞</li>
+                                    <li>安全的表达式处理</li>
+                                </ul>
+                                <div class="mt-3">
+                                    <a href="/rce/expression" class="btn btn-primary">
+                                        <i class="fas fa-play"></i> 开始演示
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 mb-4">
+                        <div class="card demo-card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-cogs"></i> 高级RCE技术</h5>
+                            </div>
+                            <div class="card-body">
+                                <p>演示反序列化、模板注入等高级RCE技术。</p>
+                                <h6>演示内容：</h6>
+                                <ul>
+                                    <li>Java反序列化RCE</li>
+                                    <li>模板注入漏洞</li>
+                                    <li>类加载器利用</li>
+                                    <li>防护机制绕过</li>
+                                </ul>
+                                <div class="mt-3">
+                                    <a href="/rce/advanced" class="btn btn-primary">
+                                        <i class="fas fa-play"></i> 开始演示
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 常见RCE载荷 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bomb"></i> 常见RCE载荷示例</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>基础命令执行：</h6>
+                                <div class="payload-box p-2 mb-2" th:each="payload : ${payloads}" th:if="${payloadStat.index < 8}">
+                                    <code th:text="${payload}">载荷</code>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>表达式注入：</h6>
+                                <div class="payload-box p-2 mb-2" th:each="payload : ${expressionPayloads}" th:if="${payloadStat.index < 8}">
+                                    <code th:text="${payload}">载荷</code>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6>命令注入技巧：</h6>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>; command</code>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>| command</code>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>&& command</code>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="payload-box p-2 mb-2">
+                                        <code>`command`</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RCE类型说明 -->
+                <div class="row">
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-warning">
+                                <h6 class="mb-0"><i class="fas fa-terminal"></i> 命令注入</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>原理：</strong>应用程序将用户输入拼接到系统命令中执行。</p>
+                                <p><strong>示例：</strong></p>
+                                <div class="payload-box p-2">
+                                    <code>ping -c 1 192.168.1.1; cat /etc/passwd</code>
+                                </div>
+                                <p class="mt-2"><strong>危害：</strong>执行任意系统命令</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-warning">
+                                <h6 class="mb-0"><i class="fas fa-code"></i> 代码注入</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>原理：</strong>应用程序动态执行用户提供的代码。</p>
+                                <p><strong>示例：</strong></p>
+                                <div class="payload-box p-2">
+                                    <code>Runtime.getRuntime().exec("whoami")</code>
+                                </div>
+                                <p class="mt-2"><strong>危害：</strong>执行任意Java代码</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-warning">
+                                <h6 class="mb-0"><i class="fas fa-file-code"></i> 反序列化</h6>
+                            </div>
+                            <div class="card-body">
+                                <p><strong>原理：</strong>反序列化恶意构造的对象触发代码执行。</p>
+                                <p><strong>示例：</strong></p>
+                                <div class="payload-box p-2">
+                                    <code>ysoserial CommonsCollections1</code>
+                                </div>
+                                <p class="mt-2"><strong>危害：</strong>绕过应用层防护</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护措施 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> RCE防护措施</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>输入验证：</h6>
+                            <ul>
+                                <li>严格的输入格式验证</li>
+                                <li>命令白名单机制</li>
+                                <li>特殊字符过滤</li>
+                                <li>参数长度限制</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>安全编程：</h6>
+                            <ul>
+                                <li>避免动态命令执行</li>
+                                <li>使用参数化API</li>
+                                <li>最小权限原则</li>
+                                <li>沙箱环境隔离</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学习路径 -->
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-graduation-cap"></i> 建议学习路径</h5>
+                    <ol>
+                        <li><strong>基础命令执行：</strong>了解Runtime.exec()和ProcessBuilder的使用</li>
+                        <li><strong>命令注入技巧：</strong>学习各种命令分隔符和绕过技术</li>
+                        <li><strong>文件上传RCE：</strong>理解文件上传漏洞的利用方式</li>
+                        <li><strong>表达式注入：</strong>掌握SpEL、OGNL等表达式语言漏洞</li>
+                        <li><strong>反序列化RCE：</strong>深入学习Java反序列化漏洞</li>
+                        <li><strong>防护机制：</strong>学习有效的RCE防护方法</li>
+                    </ol>
+                </div>
+
+                <!-- 系统信息 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-info-circle"></i> 当前系统信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="systemInfo">
+                            <button class="btn btn-outline-primary" onclick="loadSystemInfo()">
+                                <i class="fas fa-sync"></i> 获取系统信息
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        function loadSystemInfo() {
+            fetch('/rce/info')
+                .then(response => response.json())
+                .then(data => {
+                    let html = '<div class="row">';
+                    for (let key in data) {
+                        html += `<div class="col-md-6 mb-2">
+                                    <strong>${key}:</strong> ${data[key]}
+                                </div>`;
+                    }
+                    html += '</div>';
+                    document.getElementById('systemInfo').innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('systemInfo').innerHTML = 
+                        '<div class="alert alert-danger">获取系统信息失败: ' + error + '</div>';
+                });
+        }
+    </script>
+</body>
+</html>

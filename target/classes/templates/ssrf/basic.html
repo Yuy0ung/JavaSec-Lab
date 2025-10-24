@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基础SSRF攻击演示 - Java Security Lab</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet">
+    <style>
+        .vulnerability-demo { background-color: #fff3cd; border: 1px solid #ffeaa7; }
+        .safe-demo { background-color: #d1ecf1; border: 1px solid #bee5eb; }
+        .payload-box { background-color: #f8f9fa; border: 1px solid #dee2e6; font-family: monospace; }
+        .result-box { min-height: 150px; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa; font-family: monospace; white-space: pre-wrap; }
+        .attack-input { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Java Security Lab</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/ssrf">SSRF主页</a>
+                <a class="nav-link" href="/">返回首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">基础SSRF攻击演示</h1>
+                
+                <!-- 说明部分 -->
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle"></i> 基础SSRF攻击</h5>
+                    <p>基础SSRF攻击主要包括内网服务扫描、端口探测、本地文件读取等。攻击者通过构造恶意URL，让服务器向指定地址发起请求。</p>
+                    <p><strong>攻击目标：</strong> 内网服务、本地服务、云服务元数据等</p>
+                    <p><strong>危害等级：</strong> 高 - 可获取内网信息，绕过防火墙限制</p>
+                </div>
+
+                <!-- 不安全的SSRF演示 -->
+                <div class="card vulnerability-demo mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0"><i class="fas fa-bomb"></i> 不安全的URL请求（存在SSRF漏洞）</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-danger"><strong>危险：</strong> 直接使用用户输入的URL发起请求，存在SSRF风险</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="unsafeUrl" class="form-label">目标URL：</label>
+                                    <input type="text" class="form-control attack-input" id="unsafeUrl" 
+                                           placeholder="http://example.com" value="http://httpbin.org/get">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="unsafeMethod" class="form-label">请求方法：</label>
+                                    <select class="form-select" id="unsafeMethod">
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <option value="DELETE">DELETE</option>
+                                        <option value="HEAD">HEAD</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="unsafeHeaders" class="form-label">自定义请求头：</label>
+                                    <textarea class="form-control attack-input" id="unsafeHeaders" rows="3" 
+                                              placeholder="User-Agent: Custom-Agent&#10;X-Custom-Header: value"></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="unsafeBody" class="form-label">请求体（POST/PUT）：</label>
+                                    <textarea class="form-control attack-input" id="unsafeBody" rows="3" 
+                                              placeholder='{"key": "value"}'></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-danger" onclick="executeUnsafeRequest()">
+                                        <i class="fas fa-bomb"></i> 发起请求（危险）
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearUnsafeResult()">
+                                        清除结果
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>快速测试：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeUrl('http://127.0.0.1:22')">
+                                            本地SSH服务扫描
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeUrl('http://192.168.1.1:80')">
+                                            内网HTTP服务扫描
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeUrl('http://169.254.169.254/latest/meta-data/')">
+                                            AWS元数据获取
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="setUnsafeUrl('file:///etc/passwd')">
+                                            本地文件读取
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>请求结果：</h6>
+                                <div id="unsafeResult" class="result-box">
+                                    输入URL并点击"发起请求"查看结果...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 安全的SSRF防护演示 -->
+                <div class="card safe-demo mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-shield-alt"></i> 安全的URL请求（包含SSRF防护）</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-success"><strong>安全：</strong> 包含完整的SSRF防护机制，验证URL安全性</p>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="safeUrl" class="form-label">目标URL：</label>
+                                    <input type="text" class="form-control attack-input" id="safeUrl" 
+                                           placeholder="http://example.com" value="http://httpbin.org/get">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="safeMethod" class="form-label">请求方法：</label>
+                                    <select class="form-select" id="safeMethod">
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <option value="DELETE">DELETE</option>
+                                        <option value="HEAD">HEAD</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="safeHeaders" class="form-label">自定义请求头：</label>
+                                    <textarea class="form-control attack-input" id="safeHeaders" rows="3" 
+                                              placeholder="User-Agent: Custom-Agent&#10;X-Custom-Header: value"></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="safeBody" class="form-label">请求体（POST/PUT）：</label>
+                                    <textarea class="form-control attack-input" id="safeBody" rows="3" 
+                                              placeholder='{"key": "value"}'></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-success" onclick="executeSafeRequest()">
+                                        <i class="fas fa-shield-alt"></i> 安全请求
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearSafeResult()">
+                                        清除结果
+                                    </button>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <h6>测试防护：</h6>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-success btn-sm" onclick="setSafeUrl('http://httpbin.org/get')">
+                                            合法外部请求
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" onclick="setSafeUrl('http://127.0.0.1:22')">
+                                            内网IP测试
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" onclick="setSafeUrl('ftp://example.com')">
+                                            非法协议测试
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" onclick="setSafeUrl('http://evil.com')">
+                                            域名白名单测试
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>请求结果：</h6>
+                                <div id="safeResult" class="result-box">
+                                    输入URL并点击"安全请求"查看结果...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- URL分析工具 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>URL安全分析工具</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="analyzeUrl" class="form-label">待分析URL：</label>
+                                    <input type="text" class="form-control attack-input" id="analyzeUrl" 
+                                           placeholder="http://example.com" value="http://127.0.0.1:3306">
+                                </div>
+                                
+                                <button type="button" class="btn btn-primary" onclick="analyzeUrl()">
+                                    <i class="fas fa-search"></i> 分析URL
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ms-2" onclick="clearAnalyzeResult()">
+                                    清除结果
+                                </button>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6>分析结果：</h6>
+                                <div id="analyzeResult" class="result-box">
+                                    输入URL并点击"分析URL"查看结果...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 载荷示例 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>基础SSRF攻击载荷</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>内网服务扫描：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://127.0.0.1:22</code> - SSH服务
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://127.0.0.1:3306</code> - MySQL服务
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://127.0.0.1:6379</code> - Redis服务
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://192.168.1.1:80</code> - 内网HTTP
+                                </div>
+                                
+                                <h6>本地文件读取：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>file:///etc/passwd</code> - 系统用户文件
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>file:///etc/hosts</code> - 主机配置文件
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>云服务元数据：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://169.254.169.254/latest/meta-data/</code> - AWS
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://100.100.100.200/latest/meta-data/</code> - 阿里云
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>http://metadata.tencentyun.com/latest/meta-data/</code> - 腾讯云
+                                </div>
+                                
+                                <h6>常见内网端口：</h6>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>22, 23, 25, 53, 80, 110, 143, 443, 993, 995</code>
+                                </div>
+                                <div class="payload-box p-2 mb-2">
+                                    <code>1433, 3306, 5432, 6379, 9200, 11211</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 代码示例 -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>代码对比</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-danger">漏洞代码：</h6>
+                                <pre><code class="language-java">@PostMapping("/request")
+public String makeRequest(@RequestParam String url) {
+    try {
+        // 直接使用用户输入，存在SSRF风险
+        URL targetUrl = new URL(url);
+        HttpURLConnection conn = (HttpURLConnection) 
+            targetUrl.openConnection();
+        
+        // 读取响应
+        BufferedReader reader = new BufferedReader(
+            new InputStreamReader(conn.getInputStream()));
+        
+        StringBuilder response = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            response.append(line);
+        }
+        
+        return response.toString();
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-success">安全代码：</h6>
+                                <pre><code class="language-java">@PostMapping("/safe-request")
+public String makeSafeRequest(@RequestParam String url) {
+    try {
+        URL targetUrl = new URL(url);
+        
+        // 1. 协议检查
+        if (!"http".equals(targetUrl.getProtocol()) && 
+            !"https".equals(targetUrl.getProtocol())) {
+            return "Error: 不允许的协议";
+        }
+        
+        // 2. 域名白名单检查
+        String host = targetUrl.getHost();
+        if (!isAllowedDomain(host)) {
+            return "Error: 域名不在白名单中";
+        }
+        
+        // 3. 内网IP检查
+        if (isPrivateIP(host)) {
+            return "Error: 禁止访问内网地址";
+        }
+        
+        // 4. 端口检查
+        int port = targetUrl.getPort();
+        if (port != -1 && port != 80 && port != 443) {
+            return "Error: 不允许的端口";
+        }
+        
+        // 安全的请求处理...
+        
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 防护建议 -->
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-shield-alt"></i> SSRF防护建议</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>输入验证：</h6>
+                            <ul>
+                                <li>URL格式严格验证</li>
+                                <li>协议白名单（仅http/https）</li>
+                                <li>域名白名单机制</li>
+                                <li>内网IP地址黑名单</li>
+                                <li>端口限制（80/443）</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>网络层防护：</h6>
+                            <ul>
+                                <li>DNS解析结果检查</li>
+                                <li>请求超时设置</li>
+                                <li>重定向次数限制</li>
+                                <li>响应大小限制</li>
+                                <li>网络隔离和防火墙</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // 设置不安全请求URL
+        function setUnsafeUrl(url) {
+            document.getElementById('unsafeUrl').value = url;
+        }
+        
+        // 设置安全请求URL
+        function setSafeUrl(url) {
+            document.getElementById('safeUrl').value = url;
+        }
+        
+        // 执行不安全的请求
+        function executeUnsafeRequest() {
+            const url = document.getElementById('unsafeUrl').value;
+            const method = document.getElementById('unsafeMethod').value;
+            const headers = document.getElementById('unsafeHeaders').value;
+            const body = document.getElementById('unsafeBody').value;
+            
+            if (!url.trim()) {
+                alert('请输入目标URL');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('unsafeResult');
+            resultDiv.textContent = '发起请求中...';
+            
+            fetch('/ssrf/request/unsafe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `url=${encodeURIComponent(url)}&method=${method}&headers=${encodeURIComponent(headers)}&body=${encodeURIComponent(body)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `请求URL: ${data.requestUrl}\n`;
+                result += `请求方法: ${data.method}\n`;
+                result += `执行时间: ${data.executionTime}ms\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n\n`;
+                
+                if (data.responseCode) {
+                    result += `响应状态码: ${data.responseCode}\n`;
+                    result += `响应消息: ${data.responseMessage}\n\n`;
+                }
+                
+                if (data.responseHeaders) {
+                    result += `响应头:\n`;
+                    for (const [key, value] of Object.entries(data.responseHeaders)) {
+                        if (value && value.length > 0) {
+                            result += `  ${key}: ${value[0]}\n`;
+                        }
+                    }
+                    result += '\n';
+                }
+                
+                if (data.responseBody) {
+                    result += `响应内容:\n${data.responseBody}`;
+                }
+                
+                if (data.error) {
+                    result += `错误信息: ${data.error}`;
+                }
+                
+                if (data.warning) {
+                    result += `\n警告: ${data.warning}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '请求失败: ' + error;
+            });
+        }
+        
+        // 执行安全的请求
+        function executeSafeRequest() {
+            const url = document.getElementById('safeUrl').value;
+            const method = document.getElementById('safeMethod').value;
+            const headers = document.getElementById('safeHeaders').value;
+            const body = document.getElementById('safeBody').value;
+            
+            if (!url.trim()) {
+                alert('请输入目标URL');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('safeResult');
+            resultDiv.textContent = '发起安全请求中...';
+            
+            fetch('/ssrf/request/safe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `url=${encodeURIComponent(url)}&method=${method}&headers=${encodeURIComponent(headers)}&body=${encodeURIComponent(body)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                let result = `请求URL: ${data.requestUrl}\n`;
+                result += `请求方法: ${data.method}\n`;
+                result += `执行时间: ${data.executionTime}ms\n`;
+                result += `状态: ${data.success ? '成功' : '失败'}\n`;
+                
+                if (data.securityCheck) {
+                    result += `安全检查: ${data.securityCheck}\n`;
+                }
+                
+                result += '\n';
+                
+                if (data.responseCode) {
+                    result += `响应状态码: ${data.responseCode}\n`;
+                    result += `响应消息: ${data.responseMessage}\n\n`;
+                }
+                
+                if (data.responseHeaders) {
+                    result += `响应头:\n`;
+                    for (const [key, value] of Object.entries(data.responseHeaders)) {
+                        if (value && value.length > 0) {
+                            result += `  ${key}: ${value[0]}\n`;
+                        }
+                    }
+                    result += '\n';
+                }
+                
+                if (data.responseBody) {
+                    result += `响应内容:\n${data.responseBody}`;
+                }
+                
+                if (data.error) {
+                    result += `错误信息: ${data.error}`;
+                }
+                
+                resultDiv.textContent = result;
+            })
+            .catch(error => {
+                resultDiv.textContent = '请求失败: ' + error;
+            });
+        }
+        
+        // 分析URL
+        function analyzeUrl() {
+            const url = document.getElementById('analyzeUrl').value;
+            
+            if (!url.trim()) {
+                alert('请输入待分析的URL');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('analyzeResult');
+            resultDiv.textContent = '分析URL中...';
+            
+            fetch('/ssrf/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `url=${encodeURIComponent(url)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const analysis = data.analysis;
+                    let result = `URL: ${data.url}\n\n`;
+                    
+                    if (analysis.error) {
+                        result += `错误: ${analysis.error}`;
+                    } else {
+                        result += `协议: ${analysis.protocol}\n`;
+                        result += `主机: ${analysis.host}\n`;
+                        result += `端口: ${analysis.port === -1 ? '默认' : analysis.port}\n`;
+                        result += `路径: ${analysis.path || '/'}\n`;
+                        result += `查询参数: ${analysis.query || '无'}\n`;
+                        result += `片段: ${analysis.fragment || '无'}\n\n`;
+                        
+                        result += `安全检查:\n`;
+                        result += `  内网IP: ${analysis.isPrivateIP ? '是（危险）' : '否'}\n`;
+                        result += `  允许协议: ${analysis.isAllowedProtocol ? '是' : '否（危险）'}\n`;
+                        result += `  允许域名: ${analysis.isAllowedDomain ? '是' : '否（危险）'}\n`;
+                        result += `  危险端口: ${analysis.isDangerousPort ? '是（危险）' : '否'}\n`;
+                    }
+                    
+                    resultDiv.textContent = result;
+                } else {
+                    resultDiv.textContent = '分析失败: ' + data.error;
+                }
+            })
+            .catch(error => {
+                resultDiv.textContent = '分析失败: ' + error;
+            });
+        }
+        
+        // 清除结果
+        function clearUnsafeResult() {
+            document.getElementById('unsafeResult').textContent = '输入URL并点击"发起请求"查看结果...';
+        }
+        
+        function clearSafeResult() {
+            document.getElementById('safeResult').textContent = '输入URL并点击"安全请求"查看结果...';
+        }
+        
+        function clearAnalyzeResult() {
+            document.getElementById('analyzeResult').textContent = '输入URL并点击"分析URL"查看结果...';
+        }
+    </script>
+</body>
+</html>

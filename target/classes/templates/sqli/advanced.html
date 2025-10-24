@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">SQL注入高级演示</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .advanced-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .payload-example {
+            background-color: #f8f9fa;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .form-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .sql-query {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .result-table {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .payload-btn {
+            margin: 5px;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-shield-alt"></i> Java Security Lab
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/sqli">SQL注入</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/sqli/advanced">高级演示</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 页面标题 -->
+    <div class="bg-dark text-white py-4">
+        <div class="container">
+            <h1><i class="fas fa-terminal"></i> SQL注入高级演示</h1>
+            <p class="lead mb-0">自定义SQL查询执行和高级注入技术演示</p>
+        </div>
+    </div>
+
+    <!-- 主要内容 -->
+    <div class="container my-5">
+        <div class="advanced-container">
+            <!-- 警告信息 -->
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> 危险警告</h4>
+                <p>本页面允许执行自定义SQL查询，仅用于教育目的。在生产环境中，绝不应该允许用户直接执行SQL语句！</p>
+                <hr>
+                <p class="mb-0">请谨慎使用，避免执行可能损坏数据的语句（如DROP、DELETE等）。</p>
+            </div>
+
+            <!-- 说明部分 -->
+            <div class="form-section">
+                <h3><i class="fas fa-info-circle text-primary"></i> 高级SQL注入技术</h3>
+                <p>本演示展示了各种高级SQL注入技术：</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>Union注入：</strong>联合查询获取额外数据</li>
+                            <li><strong>Boolean盲注：</strong>基于真假判断的注入</li>
+                            <li><strong>Time-based盲注：</strong>基于时间延迟的注入</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul>
+                            <li><strong>Error-based注入：</strong>利用错误信息获取数据</li>
+                            <li><strong>堆叠查询：</strong>执行多条SQL语句</li>
+                            <li><strong>二次注入：</strong>存储后执行的注入</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自定义SQL查询 -->
+            <div class="form-section">
+                <h3><i class="fas fa-code text-warning"></i> 自定义SQL查询执行</h3>
+                <form action="/sqli/advanced/execute" method="post">
+                    <div class="mb-3">
+                        <label for="sqlQuery" class="form-label">SQL查询语句</label>
+                        <textarea class="form-control" id="sqlQuery" name="query" rows="4" 
+                                  placeholder="输入你的SQL查询语句..." th:text="${param.query}"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-play"></i> 执行查询
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearQuery()">
+                        <i class="fas fa-eraser"></i> 清空
+                    </button>
+                </form>
+            </div>
+
+            <!-- 快速Payload测试 -->
+            <div class="form-section">
+                <h3><i class="fas fa-rocket text-danger"></i> 快速Payload测试</h3>
+                
+                <!-- 基础查询 -->
+                <h5><i class="fas fa-database"></i> 基础查询</h5>
+                <div class="mb-3">
+                    <button class="btn btn-outline-primary payload-btn" onclick="setQuery('SELECT * FROM users')">
+                        查看所有用户
+                    </button>
+                    <button class="btn btn-outline-primary payload-btn" onclick="setQuery('SELECT username, email FROM users WHERE role = \'ADMIN\'')">
+                        查看管理员
+                    </button>
+                    <button class="btn btn-outline-primary payload-btn" onclick="setQuery('SELECT COUNT(*) as user_count FROM users')">
+                        用户总数
+                    </button>
+                </div>
+
+                <!-- Union注入 -->
+                <h5><i class="fas fa-link"></i> Union注入</h5>
+                <div class="mb-3">
+                    <button class="btn btn-outline-danger payload-btn" onclick="setQuery('SELECT username FROM users WHERE id = 1 UNION SELECT password FROM users WHERE id = 1')">
+                        Union获取密码
+                    </button>
+                    <button class="btn btn-outline-danger payload-btn" onclick="setQuery('SELECT username FROM users WHERE id = 1 UNION SELECT CONCAT(username, \':\', password) FROM users')">
+                        Union获取用户密码对
+                    </button>
+                </div>
+
+                <!-- 信息收集 -->
+                <h5><i class="fas fa-search"></i> 信息收集</h5>
+                <div class="mb-3">
+                    <button class="btn btn-outline-info payload-btn" onclick="setQuery('SELECT DATABASE()')">
+                        当前数据库
+                    </button>
+                    <button class="btn btn-outline-info payload-btn" onclick="setQuery('SELECT USER()')">
+                        当前用户
+                    </button>
+                    <button class="btn btn-outline-info payload-btn" onclick="setQuery('SELECT VERSION()')">
+                        数据库版本
+                    </button>
+                </div>
+
+                <!-- 表结构探测 -->
+                <h5><i class="fas fa-table"></i> 表结构探测</h5>
+                <div class="mb-3">
+                    <button class="btn btn-outline-warning payload-btn" onclick="setQuery('SHOW TABLES')">
+                        显示所有表
+                    </button>
+                    <button class="btn btn-outline-warning payload-btn" onclick="setQuery('DESCRIBE users')">
+                        用户表结构
+                    </button>
+                    <button class="btn btn-outline-warning payload-btn" onclick="setQuery('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = \'users\'')">
+                        用户表字段
+                    </button>
+                </div>
+
+                <!-- 时间盲注 -->
+                <h5><i class="fas fa-clock"></i> 时间盲注</h5>
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary payload-btn" onclick="setQuery('SELECT SLEEP(2)')">
+                        延迟2秒
+                    </button>
+                    <button class="btn btn-outline-secondary payload-btn" onclick="setQuery('SELECT IF(LENGTH(DATABASE()) > 5, SLEEP(2), 0)')">
+                        条件延迟
+                    </button>
+                </div>
+            </div>
+
+            <!-- 显示执行的SQL查询 -->
+            <div class="form-section" th:if="${executedQuery}">
+                <h3><i class="fas fa-code text-info"></i> 执行的SQL查询</h3>
+                <div class="sql-query" th:text="${executedQuery}"></div>
+            </div>
+
+            <!-- 查询结果 -->
+            <div class="form-section" th:if="${results != null}">
+                <h3><i class="fas fa-table text-success"></i> 查询结果</h3>
+                <div th:if="${results.empty}" class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 查询执行成功，但没有返回数据
+                </div>
+                <div th:if="${!results.empty}" class="result-table">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th th:each="column : ${results[0].keySet()}" th:text="${column}"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="row : ${results}">
+                                    <td th:each="column : ${row.keySet()}" th:text="${row.get(column)}"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-muted mt-2">
+                        <i class="fas fa-info-circle"></i> 
+                        共返回 <span th:text="${results.size()}"></span> 行数据
+                    </p>
+                </div>
+            </div>
+
+            <!-- 错误信息 -->
+            <div class="form-section" th:if="${error}">
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle"></i> SQL执行错误</h5>
+                    <pre th:text="${error}" class="mb-0"></pre>
+                    <hr>
+                    <p class="mb-0"><small>
+                        <i class="fas fa-lightbulb"></i> 
+                        提示：错误信息有时也能泄露有用的数据库信息，这被称为Error-based SQL注入
+                    </small></p>
+                </div>
+            </div>
+
+            <!-- SQL注入防护建议 -->
+            <div class="form-section">
+                <h3><i class="fas fa-shield-alt text-success"></i> SQL注入防护建议</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>代码层面防护：</h5>
+                        <ul>
+                            <li>使用参数化查询/预编译语句</li>
+                            <li>输入验证和过滤</li>
+                            <li>使用ORM框架</li>
+                            <li>避免动态SQL拼接</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>系统层面防护：</h5>
+                        <ul>
+                            <li>数据库用户权限最小化</li>
+                            <li>定期更新数据库软件</li>
+                            <li>使用Web应用防火墙(WAF)</li>
+                            <li>定期安全审计和渗透测试</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white py-4 mt-5">
+        <div class="container text-center">
+            <p>&copy; 2024 Java Security Lab. 仅用于教育目的.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function setQuery(query) {
+            document.getElementById('sqlQuery').value = query;
+        }
+        
+        function clearQuery() {
+            document.getElementById('sqlQuery').value = '';
+        }
+    </script>
+</body>
+</html>
